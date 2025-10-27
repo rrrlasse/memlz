@@ -32,6 +32,8 @@ The data format also contains a header that can tell the compressed and decompre
     size_t memlz_compressed_len(source)
     size_t memlz_decompressed_len(source)
 ```
+## Safety
+The current 0.1 beta does no validation of the input when decompressing, so be careful not to decompress corrupted or manipulated data. If this library gets enough interest, a version 0.2 beta will get a safe decompression mode.
 ## No-copy
 LZ4 and most other libraries need to maintain an internal payload queue when using streaming mode which adds one additional memcpy() operation. The memlz algorithm eliminates this need.
 
