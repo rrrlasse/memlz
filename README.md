@@ -33,13 +33,13 @@ The data format also contains a header that can tell the compressed and decompre
     size_t memlz_decompressed_len(source)
 ```
 ## Safety
-Decompression of corrupted or manipulated data has two guarantees: 1) It will always return in regular time, and 2) No memory access outside the source or destination buffers will take place, according to what memlz_compressed_len() and memlz_decompressed_len() tell.
+Decompression of corrupted or manipulated data has two guarantees: 1) It will always return in regular time, and 2) No memory access outside the source or destination buffers will take place, according to what `memlz_compressed_len()` and `memlz_decompressed_len()` tell.
 ## No-copy
-LZ4 and most other libraries need to maintain an internal payload queue when using streaming mode which adds one additional memcpy() operation. The memlz algorithm eliminates this need.
+LZ4 and most other libraries need to maintain an internal payload queue when using streaming mode which adds one additional `memcpy()` operation. The memlz algorithm eliminates this need.
 
 Let's test the effect by integrating memlz into the eXdupe file archiver in two different ways. eXdupe first performs deduplication and then emits small packets of some kilobytes in size to a traditional data compression library.
 
-If we queue packets with memcpy() until they reach 1 MB and compress them at once we get:
+If we queue packets with `memcpy()` until they reach 1 MB and compress them at once we get:
 ```
 F:\eXdupe>exdupe -x1k "f:\vm\25\Ubuntu 64-bit-s003.vmdk" -stdout > NUL
 Input:                       4,012,638,208 B in 1 files
