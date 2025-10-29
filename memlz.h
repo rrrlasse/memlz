@@ -15,6 +15,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 
 typedef struct memlz_state memlz_state;
 
@@ -86,6 +87,12 @@ static void memlz_reset(memlz_state* c);
 
 #define MEMLZ_MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
+#ifdef _WIN32
+#define MEMLZ_UNUSED
+#else
+#define MEMLZ_UNUSED __attribute__((unused))
+#endif
+
 static const size_t memlz_fields = 2;
 static const size_t memlz_words_per_round = 16;
 
@@ -150,10 +157,10 @@ typedef struct memlz_state {
     uint32_t hash32[1 << 16];
     uint64_t total_input;
     uint64_t total_output;
-    size_t mod = 0;
-    size_t wordlen = 8;
-    size_t cs4 = 0;
-    size_t cs8 = 0;
+    size_t mod;
+    size_t wordlen;
+    size_t cs4;
+    size_t cs8;
     char reset;
 } memlz_state;
 
@@ -170,10 +177,10 @@ static void memlz_reset(memlz_state* c) {
     memset(c->hash64, 0, sizeof(c->hash64));
     c->total_input = 0;
     c->total_output = 0;
-    c->cs4 = 0;
-    c->cs8 = 0;
     c->mod = 0;
     c->wordlen = 8;
+    c->cs4 = 0;
+    c->cs8 = 0;
     c->reset = 'Y';
 }
 
@@ -228,7 +235,6 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
         }
 #endif
         {
-
             *dst++ = state->wordlen == 8 ? MEMLZ_NORMAL64 : MEMLZ_NORMAL32;
             if (missing < 16 * state->wordlen) {
                 break;
@@ -257,7 +263,6 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
                     (tbl, typ, c, 2, MEMLZ_ENCODE_WORD \
                     (tbl, typ, d, 3, ))))
 
-            
             if (state->wordlen == 8) {
                 uint64_t a, b, c, d;
                 MEMLZ_UNROLL4(\
@@ -332,7 +337,7 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
     memcpy(dst, src, tail_count);
     dst += tail_count;
 
-    size_t compressed_len = size_t(dst - (uint8_t*)destination);
+    size_t compressed_len = (size_t)(dst - (uint8_t*)destination);
     if (compressed_len < memlz_header_len()) {
         memset(dst, 'M', memlz_header_len() - compressed_len);
         compressed_len = memlz_header_len();
@@ -360,8 +365,8 @@ void memlz_rw_err() {
 }
 
 // Use only small values for l that do not cause overflow
-#define MEMLZ_R(p, l) if((char*)p < r1 || (char*)p + l > r2) { memlz_rw_err(); return 0; }
-#define MEMLZ_W(p, l) if((char*)p < w1 || (char*)p + l > w2) { memlz_rw_err(); return 0; }
+#define MEMLZ_R(p, l) if(p < r1 || p + l > r2) { memlz_rw_err(); return 0; }
+#define MEMLZ_W(p, l) if(p < w1 || p + l > w2) { memlz_rw_err(); return 0; }
 
 static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, memlz_state* state) {
     const size_t decompressed_len = memlz_decompressed_len(source);
@@ -372,10 +377,10 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
     }
 
     // For memory safe decompression
-    const void* r1 = (uint8_t*)source;
-    const void* r2 = (uint8_t*)source + compressed_len;
-    const void* w1 = (uint8_t*)destination;
-    const void* w2 = (uint8_t*)destination + decompressed_len;
+    const uint8_t* r1 = (uint8_t*)source;
+    const uint8_t* r2 = (uint8_t*)source + compressed_len;
+    const uint8_t* w1 = (uint8_t*)destination;
+    const uint8_t* w2 = (uint8_t*)destination + decompressed_len;
 
     size_t header_length = memlz_bytes(source) * memlz_fields;
     const uint8_t* src = (const uint8_t*)source + header_length;
@@ -528,7 +533,7 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
     return decompressed_len;
 }
 
-static size_t memlz_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source) {
+MEMLZ_UNUSED static size_t memlz_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source) {
     memlz_state* s = (memlz_state*)malloc(sizeof(memlz_state));
     if (!s) {
         return 0;
@@ -540,7 +545,7 @@ static size_t memlz_decompress(void* MEMLZ_RESTRICT destination, const void* MEM
 }
 
 
-static size_t memlz_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, size_t len) { 
+MEMLZ_UNUSED static size_t memlz_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, size_t len) {
     memlz_state* state = (memlz_state*)malloc(sizeof(memlz_state));
     memlz_reset(state);
     size_t r = memlz_stream_compress(destination, source, len, state);
@@ -566,5 +571,6 @@ static size_t memlz_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ
 #undef MEMLZ_PROBELEN
 #undef MEMLZ_MIN_RLE
 #undef MEMLZ_RESTRICT
+#undef MEM_UNUSED
 
 #endif // memlz_h
