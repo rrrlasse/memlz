@@ -3,10 +3,10 @@ memlz is a compression library for special use cases where speeds approaching me
 ## Benchmark
 Fast libraries like Snappy, FastLZ, LZAV and LZO have better compression ratios but are well below 1000 MB/s and not comparable. Only LZ4 with its acceleration parameter set around 32 to 64 and a few other libraries come close.
 
-Benchmark of the files [Silesia](https://mattmahoney.net/dc/silesia.html) and [employees_50MB.json](https://sample.json-format.com/) on an Intel i7 with a non-cached memcpy() speed of 14000 MB/s:
+Benchmark of the files [enwik8](https://mattmahoney.net/dc/textdata.html), [Silesia](https://mattmahoney.net/dc/silesia.html) and [employees_50MB.json](https://sample.json-format.com/) on an Intel i7 with a non-cached memcpy() speed of **14000 MB/s**:
 
 ![Benchmark](https://github.com/rrrlasse/memlz/blob/res/Figure_1.png)
-<br>Decompression speed is likewise performant.
+<br>Decompression speed is faster but less competitive depending on data type: [Benchmark](https://raw.githubusercontent.com/rrrlasse/memlz/refs/heads/res/Figure_2.png)
 
 ## User friendly
 It's a header-only library. Simply include it and call `memlz_compress()`:
