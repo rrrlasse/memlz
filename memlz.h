@@ -71,7 +71,7 @@ static void memlz_reset(memlz_state* c);
 
 #define MEMLZ_DO_RLE
 #define MEMLZ_DO_INCOMPRESSIBLE
-#define MEMLZ_INCOMPRESSIBLE (8 * sizeof(uint64_t))
+#define MEMLZ_INCOMPRESSIBLE (32 * sizeof(uint64_t))
 #define MEMLZ_PROBELEN (16 * 1024)
 #define MEMLZ_BLOCKLEN (256 * 1024)
 #define MEMLZ_RLE 'D'
