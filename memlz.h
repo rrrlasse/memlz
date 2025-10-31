@@ -530,12 +530,12 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
             if (memlz_wordlen == 8) {
                 uint64_t word;
                 MEMLZ_W(dst, sizeof(word));
-                MEMLZ_DECODE_WORD(1, memlz_hash64, state->hash64, uint64_t)
+                MEMLZ_DECODE_WORD(1, memlz_hash64, state->hash64, uint64_t,)
             }
             else {
                 uint32_t word;
                 MEMLZ_W(dst, sizeof(word));
-                MEMLZ_DECODE_WORD(1, memlz_hash32, state->hash32, uint32_t)
+                MEMLZ_DECODE_WORD(1, memlz_hash32, state->hash32, uint32_t,)
             }
             missing -= memlz_wordlen;
         }
