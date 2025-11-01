@@ -362,8 +362,8 @@ static size_t memlz_compressed_len(const void* src) {
     return memlz_read((uint8_t*)src + header_field_len);
 }
 
-#define MEMLZ_R(p, l) do { if ((p) < r1 || (l) > ((r2) - (p))) return 0; } while (0)
-#define MEMLZ_W(p, l) do { if ((p) < w1 || (l) > ((w2) - (p))) return 0; } while (0)
+#define MEMLZ_R(p, l) do { if ((p) < r1 || (ptrdiff_t)(l) > ((r2) - (p))) return 0; } while (0)
+#define MEMLZ_W(p, l) do { if ((p) < w1 || (ptrdiff_t)(l) > ((w2) - (p))) return 0; } while (0)
 
 static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, memlz_state* state) {
     const size_t decompressed_len = memlz_decompressed_len(source);
@@ -525,7 +525,6 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
         uint16_t flags = *(uint16_t*)src;
         src += 2;
 
-        int bitpos = memlz_words_per_round - 1;
         while (missing >= memlz_wordlen) {
             if (memlz_wordlen == 8) {
                 uint64_t word;
