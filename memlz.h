@@ -525,7 +525,6 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
         uint16_t flags = *(uint16_t*)src;
         src += 2;
 
-        int bitpos = memlz_words_per_round - 1;
         while (missing >= memlz_wordlen) {
             if (memlz_wordlen == 8) {
                 uint64_t word;
