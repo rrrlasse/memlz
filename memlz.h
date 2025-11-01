@@ -72,8 +72,8 @@ static void memlz_reset(memlz_state* c);
 #define MEMLZ_DO_RLE
 #define MEMLZ_DO_INCOMPRESSIBLE
 #define MEMLZ_INCOMPRESSIBLE (32 * sizeof(uint64_t))
-#define MEMLZ_PROBELEN (16 * 1024)
-#define MEMLZ_BLOCKLEN (256 * 1024)
+#define MEMLZ_PROBELEN (2 * 1024)
+#define MEMLZ_BLOCKLEN (128 * 1024)
 #define MEMLZ_RLE 'D'
 #define MEMLZ_MIN_RLE (4 * sizeof(uint64_t))
 
@@ -362,8 +362,8 @@ static size_t memlz_compressed_len(const void* src) {
     return memlz_read((uint8_t*)src + header_field_len);
 }
 
-#define MEMLZ_R(p, l) do { if ((p) < r1 || (l) > ((r2) - (p))) return 0; } while (0)
-#define MEMLZ_W(p, l) do { if ((p) < w1 || (l) > ((w2) - (p))) return 0; } while (0)
+#define MEMLZ_R(p, l) do { if ((p) < r1 || (ptrdiff_t)(l) > ((r2) - (p))) return 0; } while (0)
+#define MEMLZ_W(p, l) do { if ((p) < w1 || (ptrdiff_t)(l) > ((w2) - (p))) return 0; } while (0)
 
 static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, memlz_state* state) {
     const size_t decompressed_len = memlz_decompressed_len(source);
