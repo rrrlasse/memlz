@@ -217,9 +217,8 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
 
 #ifdef MEMLZ_DO_RLE
         {
-            typedef uint64_t memlz_rle;
             size_t e = 1;
-            while (e < missing / sizeof(memlz_rle) && ((memlz_rle*)src)[e] == *(memlz_rle*)src) {
+            while (e < missing / sizeof(uint64_t) && ((uint64_t*)src)[e] == *(uint64_t*)src) {
                 e++;
             }
             e *= sizeof(uint64_t);
@@ -227,8 +226,8 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
                 *dst++ = MEMLZ_RLE;
                 size_t length = memlz_fit(e);
                 memlz_write(dst, e, length);
-                *(memlz_rle*)(dst + length) = *(memlz_rle*)src;
-                dst += sizeof(memlz_rle) + length;
+                *(uint64_t*)(dst + length) = *(uint64_t*)src;
+                dst += sizeof(uint64_t) + length;
                 missing -= e;
                 src += e;
                 continue;
@@ -299,7 +298,9 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
                 *(uint16_t*)dst = (uint16_t)u;
                 memlz_write(dst, u, memlz_fit(u));
                 dst += memlz_fit(u);
-                memcpy(dst, src, u);
+                for (size_t n = 0; n < u / sizeof(uint64_t); n++) {
+                    ((uint64_t*)dst)[n] = ((uint64_t*)src)[n];
+                }
                 dst += u;
                 src += u;
                 missing -= u;
@@ -410,10 +411,10 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
             MEMLZ_R(src, unc);
             MEMLZ_W(dst, unc);
             for (size_t n = 0; n < unc / sizeof(uint64_t); n++) {
-                *(uint64_t*)dst = *(uint64_t*)src;
-                src += 8;
-                dst += 8;
+                ((uint64_t*)dst)[n] = ((uint64_t*)src)[n];
             }
+            src += unc;
+            dst += unc;
             missing -= unc;
             continue;
         }
@@ -421,21 +422,20 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
 
 #ifdef MEMLZ_DO_RLE
         if (blocktype == MEMLZ_RLE) {
-            typedef uint64_t rle;
             MEMLZ_R(src, 1);
             size_t len = memlz_bytes(src);
             MEMLZ_R(src, len);
             uint64_t z = memlz_read(src);
             src += len;
-            MEMLZ_R(src, sizeof(rle));
-            uint64_t v = *((rle*)src);
-            src += sizeof(rle);
+            MEMLZ_R(src, sizeof(uint64_t));
+            uint64_t v = *((uint64_t*)src);
+            src += sizeof(uint64_t);
             MEMLZ_W(dst, z);
             for (uint64_t n = 0; n < z / sizeof(uint64_t); n++) {
-                *(rle*)dst = v;
-                dst += sizeof(rle);
-                missing -= sizeof(rle);
+                ((uint64_t*)dst)[n] = v;
             }
+            dst += z;
+            missing -= z;
             continue;
         }
 #endif
