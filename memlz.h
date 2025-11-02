@@ -16,6 +16,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <limits.h>
 
 typedef struct memlz_state memlz_state;
 
@@ -148,7 +149,7 @@ static void memlz__write(void* dst, uint64_t value, size_t bytes) {
     }
 }
 
-static uint64_t memlz__fit(uint64_t value) {
+static size_t memlz__fit(uint64_t value) {
     return value < 64ULL ? 1ULL : value <= 0xffffULL ? 3ULL : value <= 0xffffffffULL ? 5ULL : 9ULL;
 }
 
@@ -157,15 +158,20 @@ typedef struct memlz_state {
     uint32_t hash32[1 << 16];
     uint64_t total_input;
     uint64_t total_output;
+    uint64_t cs4;
+    uint64_t cs8;
     size_t mod;
     size_t wordlen;
-    size_t cs4;
-    size_t cs8;
     char reset;
 } memlz_state;
 
 static size_t memlz_max_compressed_len(size_t input) {
-    return 68 * input / 64 + 100; // todo, find real bound
+    size_t m = input / 64 * 68 + 100; // todo, find real bound
+    if (m < input) {
+        return 0;
+    }
+    return m;
+
 }
 
 static size_t memlz_header_len() {
@@ -190,7 +196,7 @@ static size_t memlz_stream_compress(void* MEMLZ__RESTRICT destination, const voi
     }
 
     const size_t max = memlz_max_compressed_len(len) > len ? memlz_max_compressed_len(len) : len;
-    const size_t header_len = memlz__fields * memlz__fit(max);
+    const size_t header_len = memlz__fields * (size_t)memlz__fit(max);
     size_t missing = len;
     const uint8_t* src = (const uint8_t*)source;
     uint8_t* dst = (uint8_t*)destination;
@@ -228,7 +234,7 @@ static size_t memlz_stream_compress(void* MEMLZ__RESTRICT destination, const voi
             e *= sizeof(uint64_t);
             if (e >= MEMLZ__MIN_RLE) {
                 *dst++ = MEMLZ__RLE;
-                size_t length = memlz__fit(e);
+                size_t length = (size_t)memlz__fit(e);
                 memlz__write(dst, e, length);
                 *(uint64_t*)(dst + length) = *(uint64_t*)src;
                 dst += sizeof(uint64_t) + length;
@@ -359,12 +365,20 @@ static size_t memlz_stream_compress(void* MEMLZ__RESTRICT destination, const voi
 }
 
 static size_t memlz_decompressed_len(const void* src) {
-    return memlz__read(src);
+    uint64_t d = memlz__read(src);
+    if (d > SIZE_MAX) {
+        return 0;
+    }
+    return (size_t)d;
 }
 
 static size_t memlz_compressed_len(const void* src) {
     size_t header_field_len = memlz__bytes(src);
-    return memlz__read((uint8_t*)src + header_field_len);
+    uint64_t c = memlz__read((uint8_t*)src + header_field_len);
+    if (c > SIZE_MAX) {
+        return 0;
+    }
+    return (size_t)c;
 }
 
 #define MEMLZ__R(p, l) do { if ((p) < r1 || (l) > (size_t)((r2) - (p))) return 0; } while (0)
@@ -414,7 +428,7 @@ static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const v
             MEMLZ__R(src, 1);
             size_t len = memlz__bytes(src);
             MEMLZ__R(src, len);
-            size_t unc = memlz__read(src);
+            size_t unc = (size_t)memlz__read(src);
             src += len;
             MEMLZ__R(src, unc);
             MEMLZ__W(dst, unc);
@@ -433,7 +447,7 @@ static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const v
             MEMLZ__R(src, 1);
             size_t len = memlz__bytes(src);
             MEMLZ__R(src, len);
-            uint64_t z = memlz__read(src);
+            size_t z = (size_t)memlz__read(src);
             src += len;
             MEMLZ__R(src, sizeof(uint64_t));
             uint64_t v = *((uint64_t*)src);
