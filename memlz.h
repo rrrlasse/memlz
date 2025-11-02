@@ -8,8 +8,8 @@
 // by Guillaume Voirin. Thanks to Charles Bloom for his simple reference implementation and 
 // for the original LZP-style of algorithms.
 
-#ifndef memlz_h
-#define memlz_h
+#ifndef memlz__h
+#define memlz__h
 
 #include <stdint.h>
 #include <stddef.h>
@@ -69,43 +69,43 @@ static void memlz_reset(memlz_state* c);
 // The rest of this header file is internals
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define MEMLZ_DO_RLE
-#define MEMLZ_DO_INCOMPRESSIBLE
-#define MEMLZ_INCOMPRESSIBLE (32 * sizeof(uint64_t))
-#define MEMLZ_PROBELEN (2 * 1024)
-#define MEMLZ_BLOCKLEN (128 * 1024)
-#define MEMLZ_RLE 'D'
-#define MEMLZ_MIN_RLE (4 * sizeof(uint64_t))
+#define MEMLZ__DO_RLE
+#define MEMLZ__DO_INCOMPRESSIBLE
+#define MEMLZ__INCOMPRESSIBLE (32 * sizeof(uint64_t))
+#define MEMLZ__PROBELEN (2 * 1024)
+#define MEMLZ__BLOCKLEN (128 * 1024)
+#define MEMLZ__RLE 'D'
+#define MEMLZ__MIN_RLE (4 * sizeof(uint64_t))
 
-#define MEMLZ_RESTRICT __restrict
+#define MEMLZ__RESTRICT __restrict
 
-#define MEMLZ_UNROLL4(op) op; op; op; op
-#define MEMLZ_UNROLL16(op) op; op; op; op; op; op; op; op; op; op; op; op; op; op; op; op;
-#define MEMLZ_NORMAL32 'A'
-#define MEMLZ_NORMAL64 'B'
-#define MEMLZ_UNCOMPRESSED 'C'
+#define MEMLZ__UNROLL4(op) op; op; op; op
+#define MEMLZ__UNROLL16(op) op; op; op; op; op; op; op; op; op; op; op; op; op; op; op; op;
+#define MEMLZ__NORMAL32 'A'
+#define MEMLZ__NORMAL64 'B'
+#define MEMLZ__UNCOMPRESSED 'C'
 
-#define MEMLZ_MIN(X, Y) ((X) < (Y) ? (X) : (Y))
+#define MEMLZ__MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
 #ifdef _WIN32
-#define MEMLZ_UNUSED
+#define MEMLZ__UNUSED
 #else
-#define MEMLZ_UNUSED __attribute__((unused))
+#define MEMLZ__UNUSED __attribute__((unused))
 #endif
 
-static const size_t memlz_fields = 2;
-static const size_t memlz_words_per_round = 16;
+static const size_t memlz__fields = 2;
+static const size_t memlz__words_per_round = 16;
 
-static uint16_t memlz_hash32(uint32_t v) {
+static uint16_t memlz__hash32(uint32_t v) {
     return (uint16_t)(((v * 2654435761ull) >> 16));
 }
 
-static uint16_t memlz_hash64(uint64_t v) {
+static uint16_t memlz__hash64(uint64_t v) {
     return (uint16_t)(((v * 11400714819323198485ull) >> 48));
 }
 
 
-static uint64_t memlz_read(const void* src) {
+static uint64_t memlz__read(const void* src) {
     uint8_t* s = (uint8_t*)src;
     size_t bytes = *s >> 6;
     return bytes == 0 ? *s & 0b00111111
@@ -114,7 +114,7 @@ static uint64_t memlz_read(const void* src) {
         : *(uint64_t*)(s + 1);
 }
 
-static size_t memlz_bytes(const void* src) {
+static size_t memlz__bytes(const void* src) {
     uint8_t* s = (uint8_t*)src;
     size_t bytes = *s >> 6;
     return bytes == 0 ? 1
@@ -123,7 +123,7 @@ static size_t memlz_bytes(const void* src) {
         : 9;
 }
 
-static void memlz_write(void* dst, uint64_t value, size_t bytes) {
+static void memlz__write(void* dst, uint64_t value, size_t bytes) {
     assert(bytes == 1 || bytes == 3 || bytes == 5 || bytes == 9);
 
     uint8_t* d = (uint8_t*)dst;
@@ -148,7 +148,7 @@ static void memlz_write(void* dst, uint64_t value, size_t bytes) {
     }
 }
 
-static uint64_t memlz_fit(uint64_t value) {
+static uint64_t memlz__fit(uint64_t value) {
     return value < 64 ? 1 : value <= 0xffff ? 3 : value <= 0xffffffff ? 5 : 9;
 }
 
@@ -184,9 +184,9 @@ static void memlz_reset(memlz_state* c) {
     c->reset = 'Y';
 }
 
-static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, size_t len, memlz_state* state) {
+static size_t memlz_stream_compress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source, size_t len, memlz_state* state) {
     const size_t max = memlz_max_compressed_len(len) > len ? memlz_max_compressed_len(len) : len;
-    const size_t header_len = memlz_fields * memlz_fit(max);
+    const size_t header_len = memlz__fields * memlz__fit(max);
     size_t missing = len;
     const uint8_t* src = (const uint8_t*)source;
     uint8_t* dst = (uint8_t*)destination;
@@ -197,35 +197,35 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
             // Compress 8-byte words, then 4-byte words and compare ratios and select best.
             // TODO: Occurences of RLE or incompressible blocks wil disturb the result.
             state->mod++;
-            if (state->mod == MEMLZ_PROBELEN / 128) {
+            if (state->mod == MEMLZ__PROBELEN / 128) {
                 state->cs8 = (state->total_output + (dst - (uint8_t*)destination)) - state->cs8;
                 state->cs4 = (state->total_output + (dst - (uint8_t*)destination));
                 state->wordlen = 4;
             }
-            else if (state->mod == 3 * MEMLZ_PROBELEN / 128) {
+            else if (state->mod == 3 * MEMLZ__PROBELEN / 128) {
                 state->cs4 = state->total_output + (dst - (uint8_t*)destination) - state->cs4;
                 if (state->cs8 < state->cs4) {
                     state->wordlen = 8;
                 }
             }
-            else if (state->mod == (MEMLZ_BLOCKLEN + MEMLZ_PROBELEN) / 128) {
+            else if (state->mod == (MEMLZ__BLOCKLEN + MEMLZ__PROBELEN) / 128) {
                 state->wordlen = 8;
                 state->mod = 0;
                 state->cs8 = state->total_output + (dst - (uint8_t*)destination);
                 state->cs4 = 0;
             }
 
-#ifdef MEMLZ_DO_RLE
+#ifdef MEMLZ__DO_RLE
         {
             size_t e = 1;
             while (e < missing / sizeof(uint64_t) && ((uint64_t*)src)[e] == *(uint64_t*)src) {
                 e++;
             }
             e *= sizeof(uint64_t);
-            if (e >= MEMLZ_MIN_RLE) {
-                *dst++ = MEMLZ_RLE;
-                size_t length = memlz_fit(e);
-                memlz_write(dst, e, length);
+            if (e >= MEMLZ__MIN_RLE) {
+                *dst++ = MEMLZ__RLE;
+                size_t length = memlz__fit(e);
+                memlz__write(dst, e, length);
                 *(uint64_t*)(dst + length) = *(uint64_t*)src;
                 dst += sizeof(uint64_t) + length;
                 missing -= e;
@@ -235,7 +235,7 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
         }
 #endif
         {
-            *dst++ = state->wordlen == 8 ? MEMLZ_NORMAL64 : MEMLZ_NORMAL32;
+            *dst++ = state->wordlen == 8 ? MEMLZ__NORMAL64 : MEMLZ__NORMAL32;
             if (missing < 16 * state->wordlen) {
                 break;
             }
@@ -243,7 +243,7 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
             uint16_t* flags_ptr = (uint16_t*)dst;
             dst += 2;
 
-            #define MEMLZ_ENCODE_WORD(tbl, typ, h, i, next) \
+            #define MEMLZ__ENCODE_WORD(tbl, typ, h, i, next) \
             flags <<= 1; \
             if (tbl[h] == ((typ*)src)[i]) { \
                 flags |= 1; \
@@ -257,31 +257,31 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
                 next; \
             }
 
-            #define MEMLZ_ENCODE4(tbl, typ, a, b, c, d) MEMLZ_ENCODE_WORD \
-                    (tbl, typ, a, 0, MEMLZ_ENCODE_WORD \
-                    (tbl, typ, b, 1, MEMLZ_ENCODE_WORD \
-                    (tbl, typ, c, 2, MEMLZ_ENCODE_WORD \
+            #define MEMLZ__ENCODE4(tbl, typ, a, b, c, d) MEMLZ__ENCODE_WORD \
+                    (tbl, typ, a, 0, MEMLZ__ENCODE_WORD \
+                    (tbl, typ, b, 1, MEMLZ__ENCODE_WORD \
+                    (tbl, typ, c, 2, MEMLZ__ENCODE_WORD \
                     (tbl, typ, d, 3, ))))
 
             if (state->wordlen == 8) {
                 uint64_t a, b, c, d;
-                MEMLZ_UNROLL4(\
-                    a = memlz_hash64(((uint64_t*)src)[0]); \
-                    b = memlz_hash64(((uint64_t*)src)[1]); \
-                    c = memlz_hash64(((uint64_t*)src)[2]); \
-                    d = memlz_hash64(((uint64_t*)src)[3]); \
-                    MEMLZ_ENCODE4(state->hash64, uint64_t, a, b, c, d); \
+                MEMLZ__UNROLL4(\
+                    a = memlz__hash64(((uint64_t*)src)[0]); \
+                    b = memlz__hash64(((uint64_t*)src)[1]); \
+                    c = memlz__hash64(((uint64_t*)src)[2]); \
+                    d = memlz__hash64(((uint64_t*)src)[3]); \
+                    MEMLZ__ENCODE4(state->hash64, uint64_t, a, b, c, d); \
                     src += 4 * sizeof(uint64_t);
                 )
             }
             else {
                 uint32_t a, b, c, d;
-                MEMLZ_UNROLL4(\
-                    a = memlz_hash32(((uint32_t*)src)[0]); \
-                    b = memlz_hash32(((uint32_t*)src)[1]); \
-                    c = memlz_hash32(((uint32_t*)src)[2]); \
-                    d = memlz_hash32(((uint32_t*)src)[3]); \
-                    MEMLZ_ENCODE4(state->hash32, uint32_t, a, b, c, d); \
+                MEMLZ__UNROLL4(\
+                    a = memlz__hash32(((uint32_t*)src)[0]); \
+                    b = memlz__hash32(((uint32_t*)src)[1]); \
+                    c = memlz__hash32(((uint32_t*)src)[2]); \
+                    d = memlz__hash32(((uint32_t*)src)[3]); \
+                    MEMLZ__ENCODE4(state->hash32, uint32_t, a, b, c, d); \
                     src += 4 * sizeof(uint32_t);
                 )
             }
@@ -290,14 +290,14 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
             missing -= 16 * state->wordlen;
         }
 
-#ifdef MEMLZ_DO_INCOMPRESSIBLE
+#ifdef MEMLZ__DO_INCOMPRESSIBLE
         {
-            size_t u = MEMLZ_INCOMPRESSIBLE;
+            size_t u = MEMLZ__INCOMPRESSIBLE;
             if (flags == 0 && (char*)src - (char*)source + state->total_input >= 4 * 128 && missing >= u) {
-                *dst++ = MEMLZ_UNCOMPRESSED;
+                *dst++ = MEMLZ__UNCOMPRESSED;
                 *(uint16_t*)dst = (uint16_t)u;
-                memlz_write(dst, u, memlz_fit(u));
-                dst += memlz_fit(u);
+                memlz__write(dst, u, memlz__fit(u));
+                dst += memlz__fit(u);
                 for (size_t n = 0; n < u / sizeof(uint64_t); n++) {
                     ((uint64_t*)dst)[n] = ((uint64_t*)src)[n];
                 }
@@ -313,17 +313,17 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
         uint16_t* flag_ptr = (uint16_t*)dst;
         dst += 2;
         flags = 0;
-        int flags_left = memlz_words_per_round;
+        int flags_left = memlz__words_per_round;
 
         while (missing >= state->wordlen) {
 
             if (state->wordlen == 8) {
-                uint64_t a = memlz_hash64(*(uint64_t*)src);
-                MEMLZ_ENCODE_WORD(state->hash64, uint64_t, a, 0, )
+                uint64_t a = memlz__hash64(*(uint64_t*)src);
+                MEMLZ__ENCODE_WORD(state->hash64, uint64_t, a, 0, )
             }
             else {
-                uint32_t a = memlz_hash32(*(uint32_t*)src);
-                MEMLZ_ENCODE_WORD(state->hash32, uint32_t, a, 0, )
+                uint32_t a = memlz__hash32(*(uint32_t*)src);
+                MEMLZ__ENCODE_WORD(state->hash32, uint32_t, a, 0, )
             }
 
             src += state->wordlen;
@@ -345,8 +345,8 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
         compressed_len = memlz_header_len();
     }
 
-    memlz_write(destination, len, header_len / memlz_fields);
-    memlz_write((uint8_t*)destination + header_len / memlz_fields, compressed_len, header_len / memlz_fields);
+    memlz__write(destination, len, header_len / memlz__fields);
+    memlz__write((uint8_t*)destination + header_len / memlz__fields, compressed_len, header_len / memlz__fields);
 
     state->total_input += len;
     state->total_output += compressed_len;
@@ -355,18 +355,18 @@ static size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void
 }
 
 static size_t memlz_decompressed_len(const void* src) {
-    return memlz_read(src);
+    return memlz__read(src);
 }
 
 static size_t memlz_compressed_len(const void* src) {
-    size_t header_field_len = memlz_bytes(src);
-    return memlz_read((uint8_t*)src + header_field_len);
+    size_t header_field_len = memlz__bytes(src);
+    return memlz__read((uint8_t*)src + header_field_len);
 }
 
-#define MEMLZ_R(p, l) do { if ((p) < r1 || (l) > ((r2) - (p))) return 0; } while (0)
-#define MEMLZ_W(p, l) do { if ((p) < w1 || (l) > ((w2) - (p))) return 0; } while (0)
+#define MEMLZ__R(p, l) do { if ((p) < r1 || (l) > ((r2) - (p))) return 0; } while (0)
+#define MEMLZ__W(p, l) do { if ((p) < w1 || (l) > ((w2) - (p))) return 0; } while (0)
 
-static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, memlz_state* state) {
+static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source, memlz_state* state) {
     const size_t decompressed_len = memlz_decompressed_len(source);
     const size_t compressed_len = memlz_compressed_len(source);
 
@@ -380,7 +380,7 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
     const uint8_t* w1 = (uint8_t*)destination;
     const uint8_t* w2 = (uint8_t*)destination + decompressed_len;
 
-    size_t header_length = memlz_bytes(source) * memlz_fields;
+    size_t header_length = memlz__bytes(source) * memlz__fields;
     const uint8_t* src = (const uint8_t*)source + header_length;
     uint8_t* dst = (uint8_t*)destination;
     
@@ -388,28 +388,28 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
     size_t last_missing = 0;
 
     uint8_t blocktype = 0;
-    size_t memlz_wordlen = 0;
+    size_t memlz__wordlen = 0;
 
     for (;;) {
         // Prevent infinite loops or slow advance 
-        const size_t min_advance = MEMLZ_MIN(64, MEMLZ_MIN(MEMLZ_INCOMPRESSIBLE, MEMLZ_MIN_RLE));
+        const size_t min_advance = MEMLZ__MIN(64, MEMLZ__MIN(MEMLZ__INCOMPRESSIBLE, MEMLZ__MIN_RLE));
         if (last_missing != 0 && missing > last_missing + min_advance) {
             return 0;
         }
         last_missing = missing;
 
-        MEMLZ_R(src, 1);
+        MEMLZ__R(src, 1);
         blocktype = *(uint8_t*)src++;
 
-#ifdef MEMLZ_DO_INCOMPRESSIBLE
-        if (blocktype == MEMLZ_UNCOMPRESSED) {
-            MEMLZ_R(src, 1);
-            size_t len = memlz_bytes(src);
-            MEMLZ_R(src, len);
-            size_t unc = memlz_read(src);
+#ifdef MEMLZ__DO_INCOMPRESSIBLE
+        if (blocktype == MEMLZ__UNCOMPRESSED) {
+            MEMLZ__R(src, 1);
+            size_t len = memlz__bytes(src);
+            MEMLZ__R(src, len);
+            size_t unc = memlz__read(src);
             src += len;
-            MEMLZ_R(src, unc);
-            MEMLZ_W(dst, unc);
+            MEMLZ__R(src, unc);
+            MEMLZ__W(dst, unc);
             for (size_t n = 0; n < unc / sizeof(uint64_t); n++) {
                 ((uint64_t*)dst)[n] = ((uint64_t*)src)[n];
             }
@@ -420,17 +420,17 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
         }
 #endif
 
-#ifdef MEMLZ_DO_RLE
-        if (blocktype == MEMLZ_RLE) {
-            MEMLZ_R(src, 1);
-            size_t len = memlz_bytes(src);
-            MEMLZ_R(src, len);
-            uint64_t z = memlz_read(src);
+#ifdef MEMLZ__DO_RLE
+        if (blocktype == MEMLZ__RLE) {
+            MEMLZ__R(src, 1);
+            size_t len = memlz__bytes(src);
+            MEMLZ__R(src, len);
+            uint64_t z = memlz__read(src);
             src += len;
-            MEMLZ_R(src, sizeof(uint64_t));
+            MEMLZ__R(src, sizeof(uint64_t));
             uint64_t v = *((uint64_t*)src);
             src += sizeof(uint64_t);
-            MEMLZ_W(dst, z);
+            MEMLZ__W(dst, z);
             for (uint64_t n = 0; n < z / sizeof(uint64_t); n++) {
                 ((uint64_t*)dst)[n] = v;
             }
@@ -440,29 +440,29 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
         }
 #endif
 
-        if (blocktype == MEMLZ_NORMAL64) {
-            memlz_wordlen = 8;
+        if (blocktype == MEMLZ__NORMAL64) {
+            memlz__wordlen = 8;
         }
-        else if (blocktype == MEMLZ_NORMAL32) {
-            memlz_wordlen = 4;
+        else if (blocktype == MEMLZ__NORMAL32) {
+            memlz__wordlen = 4;
         }
         else {
             return 0;
         }
 
-        if (missing < memlz_wordlen * 16) {
+        if (missing < memlz__wordlen * 16) {
             break;
         }
 
-        MEMLZ_R(src, 2);
+        MEMLZ__R(src, 2);
         uint16_t flags = *(uint16_t*)src;
         src += 2;
 
 
-#define MEMLZ_DECODE_WORD(safe, h, tbl, typ, next) \
+#define MEMLZ__DECODE_WORD(safe, h, tbl, typ, next) \
         if (flags & 0b1000000000000000) { \
             if(safe) { \
-                MEMLZ_R(src, 2); \
+                MEMLZ__R(src, 2); \
             } \
             word = tbl[*(uint16_t*)src]; \
             src += 2; \
@@ -472,7 +472,7 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
             next; \
         } else { \
             if(safe) { \
-                MEMLZ_R(src, sizeof(typ)); \
+                MEMLZ__R(src, sizeof(typ)); \
             } \
             word = *((const typ*)src); \
             src += sizeof(typ); \
@@ -484,68 +484,68 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
         } 
 
 
-#define MEMLZ_DECODE4(safe, h, tbl, typ) MEMLZ_DECODE_WORD \
-                    (safe, h, tbl, typ, MEMLZ_DECODE_WORD \
-                    (safe, h, tbl, typ, MEMLZ_DECODE_WORD \
-                    (safe, h, tbl, typ, MEMLZ_DECODE_WORD \
+#define MEMLZ__DECODE4(safe, h, tbl, typ) MEMLZ__DECODE_WORD \
+                    (safe, h, tbl, typ, MEMLZ__DECODE_WORD \
+                    (safe, h, tbl, typ, MEMLZ__DECODE_WORD \
+                    (safe, h, tbl, typ, MEMLZ__DECODE_WORD \
                     (safe, h, tbl, typ, ))))
 
 
         if (src + 16 * sizeof(uint64_t) < r2) {
-            if (blocktype == MEMLZ_NORMAL64) {
+            if (blocktype == MEMLZ__NORMAL64) {
                 uint64_t word;
-                MEMLZ_W(dst, 16 * sizeof(word));
-                MEMLZ_UNROLL4(MEMLZ_DECODE4(0, memlz_hash64, state->hash64, uint64_t))
+                MEMLZ__W(dst, 16 * sizeof(word));
+                MEMLZ__UNROLL4(MEMLZ__DECODE4(0, memlz__hash64, state->hash64, uint64_t))
                 missing -= 16 * sizeof(uint64_t);
             }
             else {
                 uint32_t word;
-                MEMLZ_W(dst, 16 * sizeof(word));
-                MEMLZ_UNROLL4(MEMLZ_DECODE4(0, memlz_hash32, state->hash32, uint32_t))
+                MEMLZ__W(dst, 16 * sizeof(word));
+                MEMLZ__UNROLL4(MEMLZ__DECODE4(0, memlz__hash32, state->hash32, uint32_t))
                 missing -= 16 * sizeof(uint32_t);
             }
         }
         else {
-            if (blocktype == MEMLZ_NORMAL64) {
+            if (blocktype == MEMLZ__NORMAL64) {
                 uint64_t word;
-                MEMLZ_W(dst, 16 * sizeof(word));
-                MEMLZ_UNROLL4(MEMLZ_DECODE4(1, memlz_hash64, state->hash64, uint64_t))
+                MEMLZ__W(dst, 16 * sizeof(word));
+                MEMLZ__UNROLL4(MEMLZ__DECODE4(1, memlz__hash64, state->hash64, uint64_t))
                 missing -= 16 * sizeof(uint64_t);
             }
             else {
                 uint32_t word;
-                MEMLZ_W(dst, 16 * sizeof(word));
-                MEMLZ_UNROLL4(MEMLZ_DECODE4(1, memlz_hash32, state->hash32, uint32_t))
+                MEMLZ__W(dst, 16 * sizeof(word));
+                MEMLZ__UNROLL4(MEMLZ__DECODE4(1, memlz__hash32, state->hash32, uint32_t))
                 missing -= 16 * sizeof(uint32_t);
             }
         }
     }
-    if (missing >= memlz_wordlen) {
-        MEMLZ_R(src, 2);
+    if (missing >= memlz__wordlen) {
+        MEMLZ__R(src, 2);
         uint16_t flags = *(uint16_t*)src;
         src += 2;
 
-        int bitpos = memlz_words_per_round - 1;
-        while (missing >= memlz_wordlen) {
-            if (memlz_wordlen == 8) {
+        int bitpos = memlz__words_per_round - 1;
+        while (missing >= memlz__wordlen) {
+            if (memlz__wordlen == 8) {
                 uint64_t word;
-                MEMLZ_W(dst, sizeof(word));
-                MEMLZ_DECODE_WORD(1, memlz_hash64, state->hash64, uint64_t,)
+                MEMLZ__W(dst, sizeof(word));
+                MEMLZ__DECODE_WORD(1, memlz__hash64, state->hash64, uint64_t,)
             }
             else {
                 uint32_t word;
-                MEMLZ_W(dst, sizeof(word));
-                MEMLZ_DECODE_WORD(1, memlz_hash32, state->hash32, uint32_t,)
+                MEMLZ__W(dst, sizeof(word));
+                MEMLZ__DECODE_WORD(1, memlz__hash32, state->hash32, uint32_t,)
             }
-            missing -= memlz_wordlen;
+            missing -= memlz__wordlen;
         }
     }
 
     size_t tail_count = missing;
 
     while (tail_count) {
-        MEMLZ_R(src, 1);
-        MEMLZ_W(dst, 1);
+        MEMLZ__R(src, 1);
+        MEMLZ__W(dst, 1);
         *dst++ = *src++;
         tail_count--;
     }
@@ -555,7 +555,7 @@ static size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const vo
     return decompressed_len;
 }
 
-MEMLZ_UNUSED static size_t memlz_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source) {
+MEMLZ__UNUSED static size_t memlz_decompress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source) {
     memlz_state* s = (memlz_state*)malloc(sizeof(memlz_state));
     if (!s) {
         return 0;
@@ -567,7 +567,7 @@ MEMLZ_UNUSED static size_t memlz_decompress(void* MEMLZ_RESTRICT destination, co
 }
 
 
-MEMLZ_UNUSED static size_t memlz_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, size_t len) {
+MEMLZ__UNUSED static size_t memlz_compress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source, size_t len) {
     memlz_state* state = (memlz_state*)malloc(sizeof(memlz_state));
     memlz_reset(state);
     size_t r = memlz_stream_compress(destination, source, len, state);
@@ -575,24 +575,24 @@ MEMLZ_UNUSED static size_t memlz_compress(void* MEMLZ_RESTRICT destination, cons
     return r;
 }
 
-#undef MEMLZ_UNROLL4
-#undef MEMLZ_UNROLL16
-#undef MEMLZ_ENCODE_WORD
-#undef MEMLZ_DECODE_WORD
-#undef MEMLZ_VOID
-#undef MEMLZ_NORMAL32
-#undef MEMLZ_NORMAL64
-#undef MEMLZ_UNCOMPRESSED
-#undef MEMLZ_RLE
-#undef MEMLZ_WORDPROBE4096
-#undef MEMLZ_BLOCKLEN
-#undef MEMLZ_MIN
-#undef MEMLZ_DO_RLE
-#undef MEMLZ_DO_INCOMPRESSIBLE
-#undef MEMLZ_INCOMPRESSIBLE
-#undef MEMLZ_PROBELEN
-#undef MEMLZ_MIN_RLE
-#undef MEMLZ_RESTRICT
+#undef MEMLZ__UNROLL4
+#undef MEMLZ__UNROLL16
+#undef MEMLZ__ENCODE_WORD
+#undef MEMLZ__DECODE_WORD
+#undef MEMLZ__VOID
+#undef MEMLZ__NORMAL32
+#undef MEMLZ__NORMAL64
+#undef MEMLZ__UNCOMPRESSED
+#undef MEMLZ__RLE
+#undef MEMLZ__WORDPROBE4096
+#undef MEMLZ__BLOCKLEN
+#undef MEMLZ__MIN
+#undef MEMLZ__DO_RLE
+#undef MEMLZ__DO_INCOMPRESSIBLE
+#undef MEMLZ__INCOMPRESSIBLE
+#undef MEMLZ__PROBELEN
+#undef MEMLZ__MIN_RLE
+#undef MEMLZ__RESTRICT
 #undef MEM_UNUSED
 
-#endif // memlz_h
+#endif // memlz__h
