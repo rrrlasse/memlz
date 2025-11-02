@@ -107,7 +107,7 @@ static uint16_t memlz__hash64(uint64_t v) {
 
 static uint64_t memlz__read(const void* src) {
     uint8_t* s = (uint8_t*)src;
-    size_t bytes = *s >> 6;
+    size_t bytes = ((size_t)*s) >> 6;
     return bytes == 0 ? *s & 0b00111111
         : bytes == 1 ? *(uint16_t*)(s + 1)
         : bytes == 2 ? *(uint32_t*)(s + 1)
@@ -116,11 +116,11 @@ static uint64_t memlz__read(const void* src) {
 
 static size_t memlz__bytes(const void* src) {
     uint8_t* s = (uint8_t*)src;
-    size_t bytes = *s >> 6;
-    return bytes == 0 ? 1
-        : bytes == 1 ? 3
-        : bytes == 2 ? 5
-        : 9;
+    size_t bytes = ((size_t)*s) >> 6;
+    return bytes == 0ULL ? 1ULL
+        : bytes == 1ULL ? 3ULL
+        : bytes == 2ULL ? 5ULL
+        : 9ULL;
 }
 
 static void memlz__write(void* dst, uint64_t value, size_t bytes) {
@@ -149,7 +149,7 @@ static void memlz__write(void* dst, uint64_t value, size_t bytes) {
 }
 
 static uint64_t memlz__fit(uint64_t value) {
-    return value < 64 ? 1 : value <= 0xffff ? 3 : value <= 0xffffffff ? 5 : 9;
+    return value < 64ULL ? 1ULL : value <= 0xffffULL ? 3ULL : value <= 0xffffffffULL ? 5ULL : 9ULL;
 }
 
 typedef struct memlz_state {
@@ -185,6 +185,10 @@ static void memlz_reset(memlz_state* c) {
 }
 
 static size_t memlz_stream_compress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source, size_t len, memlz_state* state) {
+    if (state->reset != 'Y') {
+        return 0;
+    }
+
     const size_t max = memlz_max_compressed_len(len) > len ? memlz_max_compressed_len(len) : len;
     const size_t header_len = memlz__fields * memlz__fit(max);
     size_t missing = len;
@@ -363,10 +367,14 @@ static size_t memlz_compressed_len(const void* src) {
     return memlz__read((uint8_t*)src + header_field_len);
 }
 
-#define MEMLZ__R(p, l) do { if ((p) < r1 || (l) > ((r2) - (p))) return 0; } while (0)
-#define MEMLZ__W(p, l) do { if ((p) < w1 || (l) > ((w2) - (p))) return 0; } while (0)
+#define MEMLZ__R(p, l) do { if ((p) < r1 || (l) > (size_t)((r2) - (p))) return 0; } while (0)
+#define MEMLZ__W(p, l) do { if ((p) < w1 || (l) > (size_t)((w2) - (p))) return 0; } while (0)
 
 static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source, memlz_state* state) {
+    if (state->reset != 'Y') {
+        return 0;
+    }
+
     const size_t decompressed_len = memlz_decompressed_len(source);
     const size_t compressed_len = memlz_compressed_len(source);
 
@@ -468,7 +476,7 @@ static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const v
             src += 2; \
             *(typ*)dst = word; \
             dst += sizeof(typ); \
-            flags = flags << 1; \
+            flags = (uint16_t)(flags << 1); \
             next; \
         } else { \
             if(safe) { \
@@ -479,7 +487,7 @@ static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const v
             tbl[h(word)] = word; \
             *(typ*)dst = word; \
             dst += sizeof(typ); \
-            flags = flags << 1; \
+            flags = (uint16_t)(flags << 1); \
             next; \
         } 
 
@@ -525,7 +533,6 @@ static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const v
         uint16_t flags = *(uint16_t*)src;
         src += 2;
 
-        int bitpos = memlz__words_per_round - 1;
         while (missing >= memlz__wordlen) {
             if (memlz__wordlen == 8) {
                 uint64_t word;
@@ -554,7 +561,7 @@ static size_t memlz_stream_decompress(void* MEMLZ__RESTRICT destination, const v
     state->total_output += decompressed_len;
     return decompressed_len;
 }
-
+ 
 MEMLZ__UNUSED static size_t memlz_decompress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source) {
     memlz_state* s = (memlz_state*)malloc(sizeof(memlz_state));
     if (!s) {
@@ -565,13 +572,16 @@ MEMLZ__UNUSED static size_t memlz_decompress(void* MEMLZ__RESTRICT destination, 
     free(s);
     return r;
 }
-
+ 
 
 MEMLZ__UNUSED static size_t memlz_compress(void* MEMLZ__RESTRICT destination, const void* MEMLZ__RESTRICT source, size_t len) {
-    memlz_state* state = (memlz_state*)malloc(sizeof(memlz_state));
-    memlz_reset(state);
-    size_t r = memlz_stream_compress(destination, source, len, state);
-    free(state);
+    memlz_state* s = (memlz_state*)malloc(sizeof(memlz_state));
+    if (!s) {
+        return 0;
+    }
+    memlz_reset(s);
+    size_t r = memlz_stream_compress(destination, source, len, s);
+    free(s);
     return r;
 }
 
