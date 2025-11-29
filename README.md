@@ -1,12 +1,12 @@
 memlz is a compression library for special use cases where speeds approaching memcpy() are needed.
 
 ## Benchmark
-Fast libraries like Snappy, FastLZ, LZAV and LZO have better compression ratios but are well below 1000 MB/s and not comparable. Only LZ4 with its acceleration parameter set around 32 to 64 and a few other libraries come close.
+Fast libraries like Snappy, FastLZ, LZO and others, have better compression ratios but compression speeds well below 1000 MB/s and are not comparable. Only LZ4 with its acceleration parameter set around 32 to 64 and a few other libraries come close.
 
 Benchmark of the files [enwik8](https://mattmahoney.net/dc/textdata.html), [Silesia](https://mattmahoney.net/dc/silesia.html) and [employees_50MB.json](https://sample.json-format.com/) on an Intel i7 with a non-cached memcpy() speed of **14000 MB/s**:
 
 ![Benchmark](https://github.com/rrrlasse/memlz/blob/res/Figure_1.png)
-<br>Decompression speed is faster but less competitive depending on data type: [Benchmark](https://raw.githubusercontent.com/rrrlasse/memlz/refs/heads/res/Figure_2.png)
+<br>Decompression speed is less competitive depending on the data type: [Benchmark](https://raw.githubusercontent.com/rrrlasse/memlz/refs/heads/res/Figure_2.png). Also check out [lzbench](https://github.com/inikep/lzbench) which is easy to compile and run on your own data and also includes libraries that have even faster decompression speeds.
 
 ## User friendly
 It's a header-only library. Simply include it and call `memlz_compress()`:
@@ -15,7 +15,7 @@ It's a header-only library. Simply include it and call `memlz_compress()`:
     ...
     size_t len = memlz_compress(destination, source, size);
 ```
-With streaming mode you can compress more data than fits in memory, or you increase compression ratio if you recevive data in small packets. Simply create a state variable and call `memlz_stream_compress()` repeatedly:
+With streaming mode you can increase compression ratio if you recevive data in small packets. Simply create a state variable and call `memlz_stream_compress()` repeatedly:
 ```
     memlz_state* state = (memlz_state*)malloc(sizeof(memlz_state));
     memlz_reset(state);
@@ -46,13 +46,12 @@ Input:                       4,012,638,208 B in 1 files
 Output:                      2,148,219,886 B (53%)
 Speed w/o init overhead:     4,368 MB/s
 ```
-If we use streaming mode on each individual packet as they are received and get:
+If we use streaming mode on each individual packet as they are received we get:
 ```
 F:\eXdupe>exdupe -x1k "f:\vm\25\Ubuntu 64-bit-s003.vmdk" -stdout > NUL
 Input:                       4,012,638,208 B in 1 files
 Output:                      2,145,241,775 B (53%)
 Speed w/o init overhead:     4,616 MB/s
 ```
-The reason we cannot simply compress each small packet individually in non-streaming mode is that it would hurt compression ratio by alot.
 ## Beta
 It's currently the very first beta version and has only been tested on Intel machines. Compatibility may be broken!
