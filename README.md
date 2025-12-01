@@ -54,4 +54,4 @@ Output:                      2,145,241,775 B (53%)
 Speed w/o init overhead:     4,616 MB/s
 ```
 ## Beta
-It's currently the very first beta version and has only been tested on Intel machines. Compatibility may be broken!
+It has currently been tested on ARM64 and x86-64 with clang, gcc and Visual Studio. Note that compatibility may be broken in these early versions!
