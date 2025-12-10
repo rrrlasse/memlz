@@ -2,7 +2,7 @@
 if [ $# -eq 0 ]
   then
     echo "Pass a directory with arbitrary files to be used as test data"
-	exit 1
+    exit 1
 fi
 
 set -euo pipefail
@@ -13,12 +13,13 @@ AFL_IN="../build/afl_in"
 AFL_OUT="../build/afl_out"
 
 rm -f "$AFL_IN/*"
+rm -f ../build/afl
 
 mkdir -p ../build
 mkdir -p ../build/afl_in
 mkdir -p ../build/afl_out
 
-afl-clang-fast -O2 afl.c -o ../build/afl
+afl-clang-fast -O0 -g -fsanitize=address afl.c -o ../build/afl
 
 SRC_DIR="$1"
 SRC_DIR="${SRC_DIR%/}"
@@ -51,14 +52,17 @@ for src in "$SRC_DIR"/*; do
     fi
     offset=0
     echo "Copying $count bytes from $filename into $dst"
-	head -c "$count" "$src" > "$dst"
-	
-	../build/afl c < "$dst" > "$dst.compressed"
+    head -c "$count" "$src" > "$dst"
+    
+    if ! ../build/afl c < "$dst" > "$dst.compressed"; then
+        exit 1
+    fi
+    
 done
 
 if [ -z "$( ls -A "$AFL_IN" )" ]; then
     echo "Pass a directory with arbitrary files to be used as test data"
-	exit 1
-fi	
+    exit 1
+fi
 
 afl-fuzz -i ../build/afl_in -o "$AFL_OUT" -- ../build//afl
