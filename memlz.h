@@ -31,16 +31,16 @@ static size_t memlz_compress(void* destination, const void* source, size_t len);
 /// Returns 0 if compressed data was malformed or if internal memory allocation failed.
 static size_t memlz_decompress(void* destination, const void* source);
 
-/// Compress stream: First call memlz_reset(state) and then call memlz_compress() repeatedly.
-/// Each call will always compress and ouptput the full input data given. There is no flush
-/// function.
+/// Compress stream: First call memlz_reset(state) and then call memlz_stream_compress()
+/// repeatedly. Each call will always compress and ouptput the full input data given.
+/// There is no flush function.
 ///
 /// The destination buffer must be at least memlz_max_compressed_len(len) large.
 static size_t memlz_stream_compress(void* destination, const void* source, size_t len, memlz_state* state);
 
 /// Decompress streaming data: First call memlz_reset(state) and then call
-/// memlz_stream_decompress() repeatedly in the same order for the compressed data as when you
-/// called memlz_compress(). 
+/// memlz_stream_decompress() repeatedly in the same order for the compressed data as when
+/// you called memlz_compress(). 
 ///
 /// The destination buffer must be at least memlz_decompressed_len(source) large.
 ///
@@ -55,12 +55,12 @@ static size_t memlz_compressed_len(const void* src);
 /// memlz_header_len() number of bytes need to present
 static size_t memlz_decompressed_len(const void* src);
 
-/// Return the largest number of bytes that a given input len can compress into. Note that
-/// certain kinds of data may grow beyond its original len.
+/// Return the largest number of bytes that a given input can compress into. Note that certain
+/// kinds of data may grow beyond its original size.
 static size_t memlz_max_compressed_len(size_t input);
 
-/// Returns the number of bytes of compressed data that you need to call memlz_compressed_len()
-/// and memlz_decompressed_len()
+/// Returns the number of bytes of compressed data that need to be present in order to call 
+/// memlz_compressed_len() and memlz_decompressed_len()
 static size_t memlz_header_len();
 
 ///  Call this before the first call to memlz_compress() or memlz_decompress()
