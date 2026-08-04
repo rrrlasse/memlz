@@ -17,6 +17,11 @@
 #include <assert.h>
 #include <stdlib.h>
 
+// Workaround for a code-generation bug in MSVC 2026 with 14.51 toolsets
+#if defined(_MSC_VER) && !defined(__clang__) && (_MSC_VER >= 1951)
+#pragma optimize("g", off)
+#endif
+
 typedef struct memlz_state memlz_state;
 
 /// Compress non-streaming data. The destination buffer must be at least
@@ -611,5 +616,9 @@ MEMLZ__UNUSED static size_t memlz_compress(void* MEMLZ__RESTRICT destination, co
 #undef MEMLZ__MIN_RLE
 #undef MEMLZ__RESTRICT
 #undef MEM_UNUSED
+
+#if defined(_MSC_VER) && !defined(__clang__) && (_MSC_VER >= 1951)
+#pragma optimize("", on)
+#endif
 
 #endif // memlz__h
