@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+
+#define MEMLZ_IMPLEMENTATION
 #include "../memlz.h"
 
 #ifdef _WIN32

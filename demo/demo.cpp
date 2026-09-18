@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 
+#define MEMLZ_IMPLEMENTATION
 #include "../memlz.h"
 
 #ifdef _WIN32
