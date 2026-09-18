@@ -1,4 +1,4 @@
-memlz is a compression library for special use cases where speeds approaching memcpy() are needed.
+memlz is the world's fastest compression library
 
 ## Benchmark
 It has now been added to the independent benchmark suite [lzbench](https://github.com/inikep/lzbench).
@@ -11,8 +11,9 @@ Benchmark of the files [enwik8](https://mattmahoney.net/dc/textdata.html), [Sile
 <br>Decompression speed is less competitive depending on the data type: [Benchmark](https://raw.githubusercontent.com/rrrlasse/memlz/refs/heads/res/Figure_2.png).
 
 ## User friendly
-It's a header-only library. Simply include it and call `memlz_compress()`:
+memlz is a header-only library. Simply include it, and from one compilation unit (.c or .cpp file) of your own choice also define MEMLZ_IMPLEMENTATION:
 ```
+    #define MEMLZ_IMPLEMENTATION
     #include "memlz.h"
     ...
     size_t len = memlz_compress(destination, source, size);
