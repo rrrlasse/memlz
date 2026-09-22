@@ -1,6 +1,8 @@
+// #define MEMLZ_TEST
+
 // SPDX-License-Identifier: MIT
 //
-// memlz 0.4 beta - extremely fast header-only compression library for C and C++ on x64/x86
+// memlz 0.5 beta - extremely fast header-only compression library for C and C++ on x64/x86
 //
 // Copyright 2025 - 2026, Lasse Mikkel Reinhold
 //
@@ -14,6 +16,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h> 
+#ifndef __cplusplus
+#include <stdalign.h>
+#endif
 
 typedef struct memlz_state memlz_state;
 
@@ -21,55 +27,63 @@ typedef struct memlz_state memlz_state;
 extern "C" {
 #endif
 
-/// Compress non-streaming data. The destination buffer must be at least
-/// memlz_max_compressed_len(len) large.
-/// 
-/// Returns 0 if internal memory allocation failed
-size_t memlz_compress(void* destination, const void* source, size_t len);
+    /// Compress non-streaming data. The destination buffer must be at least
+    /// memlz_max_compressed_len(len) large.
+    /// 
+    /// Returns 0 if internal memory allocation failed
+    size_t memlz_compress(void* destination, const void* source, size_t len);
 
-/// Decompress non-streaming data. The destination buffer must be at least 
-/// memlz_decompressed_len(source) large.
-///
-/// Returns 0 if compressed data was malformed or if internal memory allocation failed.
-size_t memlz_decompress(void* destination, const void* source);
+    /// Decompress non-streaming data. The destination buffer must be at least 
+    /// memlz_decompressed_len(source) large.
+    ///
+    /// Returns 0 if compressed data was malformed or if internal memory allocation failed.
+    size_t memlz_decompress(void* destination, const void* source);
 
-/// Compress stream: First call memlz_reset(state) and then call memlz_stream_compress()
-/// repeatedly. Each call will always compress and ouptput the full input data given.
-/// There is no flush function.
-///
-/// The destination buffer must be at least memlz_max_compressed_len(len) large.
-size_t memlz_stream_compress(void* destination, const void* source, size_t len, memlz_state* state);
+    /// Compress stream: First call memlz_reset(state) and then call memlz_stream_compress()
+    /// repeatedly. Each call will always compress and ouptput the full input data given.
+    /// There is no flush function.
+    ///
+    /// The destination buffer must be at least memlz_max_compressed_len(len) large.
+    size_t memlz_stream_compress(void* destination, const void* source, size_t len, memlz_state* state);
 
-/// Decompress streaming data: First call memlz_reset(state) and then call
-/// memlz_stream_decompress() repeatedly in the same order for the compressed data as when
-/// you called memlz_compress(). 
-///
-/// The destination buffer must be at least memlz_decompressed_len(source) large.
-///
-/// Returns 0 if compressed data was malformed
-size_t memlz_stream_decompress(void* destination, const void* source, memlz_state* state);
+    /// Decompress streaming data: First call memlz_reset(state) and then call
+    /// memlz_stream_decompress() repeatedly in the same order for the compressed data as when
+    /// you called memlz_compress(). 
+    ///
+    /// The destination buffer must be at least memlz_decompressed_len(source) large.
+    ///
+    /// Returns 0 if compressed data was malformed
+    size_t memlz_stream_decompress(void* destination, const void* source, memlz_state* state);
 
-/// Takes compressed data as input and returns the decompressed len. Only the first
-/// memlz_header_len() number of bytes need to present
-size_t memlz_compressed_len(const void* src);
+    /// Takes compressed data as input and returns the decompressed len. Only the first
+    /// memlz_header_len() number of bytes need to present
+    size_t memlz_compressed_len(const void* src);
 
-/// Takes compressed data as input and returns the compressed len. Only the first
-/// memlz_header_len() number of bytes need to present
-size_t memlz_decompressed_len(const void* src);
+    /// Takes compressed data as input and returns the compressed len. Only the first
+    /// memlz_header_len() number of bytes need to present
+    size_t memlz_decompressed_len(const void* src);
 
-/// Return the largest number of bytes that a given input can compress into. Note that certain
-/// kinds of data may grow beyond its original size.
-size_t memlz_max_compressed_len(size_t input);
+    /// Return the largest number of bytes that a given input can compress into. Note that certain
+    /// kinds of data may grow beyond its original size.
+    size_t memlz_max_compressed_len(size_t input);
 
-/// Returns the number of bytes of compressed data that need to be present in order to call 
-/// memlz_compressed_len() and memlz_decompressed_len()
-size_t memlz_header_len();
+    /// Returns the number of bytes of compressed data that need to be present in order to call 
+    /// memlz_compressed_len() and memlz_decompressed_len()
+    size_t memlz_header_len(void);
 
-///  Call this before the first call to memlz_compress() or memlz_decompress()
-void memlz_reset(memlz_state* c);
+    ///  Call this before the first call to memlz_compress() or memlz_decompress()
+    void memlz_reset(memlz_state* c);
 
 #ifdef __cplusplus
 } // extern C
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+#define MEMLZ_SSE
+#endif
+
+#ifdef MEMLZ_TEST
+#define MEMLZ_IMPLEMENTATION
 #endif
 
 #ifdef MEMLZ_IMPLEMENTATION
@@ -83,6 +97,28 @@ void memlz_reset(memlz_state* c);
 // The rest of this header file is internals
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef MEMLZ_SSE
+#include <smmintrin.h>
+#endif
+
+#ifdef __cplusplus
+#define MEMLZ_ALIGN_16 alignas(16)
+#else
+#define MEMLZ_ALIGN_16 _Alignas(16)
+#endif
+
+#ifndef _WIN32
+#ifdef MEMLZ_SSE
+#define MEMLZ_SSE42 __attribute__((target("sse4.2")))
+#else
+#define MEMLZ_SSE42
+#endif
+#define MEMLZ_UNUSED __attribute__((unused))
+#else
+#define MEMLZ_SSE42
+#define MEMLZ_UNUSED
+#endif
+
 #define MEMLZ_INCOMPRESSIBLE_TRIGGER (4)
 #define MEMLZ_INCOMPRESSIBLE_ADVANCE (16 * MEMLZ_INCOMPRESSIBLE_TRIGGER)
 #define MEMLZ_PROBELEN (2 * 1024)
@@ -92,33 +128,17 @@ void memlz_reset(memlz_state* c);
 #define MEMLZ_RESTRICT __restrict
 #define MEMLZ_UNROLL4(op) op; op; op; op
 #define MEMLZ_UNROLL16(op) op; op; op; op; op; op; op; op; op; op; op; op; op; op; op; op;
-#define MEMLZ_NORMAL32 'A'
-#define MEMLZ_NORMAL64 'B'
+#define MEMLZ_NORMAL_4 'A'
+#define MEMLZ_NORMAL_8 'B'
 #define MEMLZ_UNCOMPRESSED 'C'
 #define MEMLZ_MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
-#ifdef _WIN32
-#define MEMLZ_UNUSED
-#else
-#define MEMLZ_UNUSED __attribute__((unused))
-#endif
-
 static const size_t memlz_fields = 2;
-static const size_t memlz_words_per_round = 16;
-
-static uint16_t memlz_hash32(uint32_t v) {
-    return (uint16_t)(((v * 2654435761ull) >> 16));
-}
-
-static uint16_t memlz_hash64(uint64_t v) {
-    return (uint16_t)(((v * 11400714819323198485ull) >> 48));
-}
-
 
 static uint64_t memlz_read(const void* src) {
     uint8_t* s = (uint8_t*)src;
     size_t bytes = ((size_t)*s) >> 6;
-    return bytes == 0 ? *s & 0b00111111
+    return bytes == 0 ? *s & 0x3f
         : bytes == 1 ? *(uint16_t*)(s + 1)
         : bytes == 2 ? *(uint32_t*)(s + 1)
         : *(uint64_t*)(s + 1);
@@ -144,23 +164,30 @@ static void memlz_write(void* dst, uint64_t value, size_t bytes) {
     }
     else if (bytes == 3) {
         assert(value < 0xffff);
-        *d = 0b01000000;
+        *d = 0x40;
         *(uint16_t*)(d + 1) = (uint16_t)value;
     }
     else if (bytes == 5) {
         assert(value < 0xffffffff);
-        *d = 0b10000000;
+        *d = 0x80;
         *(uint32_t*)(d + 1) = (uint32_t)value;
     }
     else if (bytes == 9) {
-        *d = 0b11000000;
+        *d = 0xc0;
         *(uint64_t*)(d + 1) = (uint64_t)value;
     }
 }
 
+
 static uint64_t memlz_fit(uint64_t value) {
     return value < 64ULL ? 1ULL : value <= 0xffffULL ? 3ULL : value <= 0xffffffffULL ? 5ULL : 9ULL;
 }
+
+#ifdef _MSC_VER
+#define MEMLZ_FORCE_INLINE __forceinline
+#else
+#define MEMLZ_FORCE_INLINE inline __attribute__((always_inline))
+#endif
 
 typedef struct memlz_state {
     uint64_t hash64[1 << 16];
@@ -179,7 +206,7 @@ size_t memlz_max_compressed_len(size_t input) {
     return 68 * input / 64 + 100; // todo, find real bound
 }
 
-size_t memlz_header_len() {
+size_t memlz_header_len(void) {
     return 18;
 }
 
@@ -196,7 +223,196 @@ void memlz_reset(memlz_state* c) {
     c->reset = 'Y';
 }
 
-size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, size_t len, memlz_state* MEMLZ_RESTRICT state) {
+static uint16_t memlz_hash32(uint32_t v) {
+    return (uint16_t)(((v * 2654435761ull) >> 16));
+}
+
+static uint16_t memlz_hash64(uint64_t v) {
+    return (uint16_t)(((v * 11400714819323198485ull) >> 48));
+}
+
+
+#ifdef MEMLZ_SSE
+
+MEMLZ_ALIGN_16 static const uint8_t memlz_shuf32[16][16] = {
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
+    {0x00, 0x01, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x08, 0x09, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x08, 0x09, 0x0c, 0x0d, 0x0e, 0x0f, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x08, 0x09, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80},
+    {0x00, 0x01, 0x04, 0x05, 0x08, 0x09, 0x0c, 0x0d, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80},
+};
+static const uint8_t memlz_sse_len[16] = { 16, 14, 14, 12, 14, 12, 12, 10, 14, 12, 12, 10, 12, 10, 10, 8 };
+
+MEMLZ_SSE42 static MEMLZ_FORCE_INLINE __m128i memlz_hash32x4_sse4(__m128i v) {
+    return _mm_srli_epi32(_mm_mullo_epi32(v, _mm_set1_epi32((int)2654435761u)), 16);
+}
+
+static MEMLZ_FORCE_INLINE uint32_t memlz_idx32(uint32_t v) {
+    return (v * 2654435761u) >> 16;
+}
+
+MEMLZ_SSE42 static MEMLZ_FORCE_INLINE __m128i memlz_gather4_direct(const uint32_t* tbl, uint32_t h0, uint32_t h1, uint32_t h2, uint32_t h3) {
+    __m128i t = _mm_cvtsi32_si128((int)tbl[h0]);
+    t = _mm_insert_epi32(t, (int)tbl[h1], 1);
+    t = _mm_insert_epi32(t, (int)tbl[h2], 2);
+    t = _mm_insert_epi32(t, (int)tbl[h3], 3);
+    return t;
+}
+
+MEMLZ_SSE42 static MEMLZ_FORCE_INLINE unsigned memlz_block32x2_sse4(uint32_t* tbl, const uint8_t* src, uint8_t* dst, size_t* adv) {
+    const __m128i va = _mm_loadu_si128((const __m128i*)src);
+    const __m128i vb = _mm_loadu_si128((const __m128i*)(src + 16));
+
+    const __m128i ha = memlz_hash32x4_sse4(va);
+    const __m128i hb = memlz_hash32x4_sse4(vb);
+
+    const uint32_t a0 = *(const uint32_t*)(src + 0), a1 = *(const uint32_t*)(src + 4);
+    const uint32_t a2 = *(const uint32_t*)(src + 8), a3 = *(const uint32_t*)(src + 12);
+    const uint32_t b0 = *(const uint32_t*)(src + 16), b1 = *(const uint32_t*)(src + 20);
+    const uint32_t b2 = *(const uint32_t*)(src + 24), b3 = *(const uint32_t*)(src + 28);
+
+    const uint32_t ia0 = memlz_idx32(a0), ia1 = memlz_idx32(a1), ia2 = memlz_idx32(a2), ia3 = memlz_idx32(a3);
+    const uint32_t ib0 = memlz_idx32(b0), ib1 = memlz_idx32(b1), ib2 = memlz_idx32(b2), ib3 = memlz_idx32(b3);
+
+    const __m128i ta = memlz_gather4_direct(tbl, ia0, ia1, ia2, ia3);
+    tbl[ia0] = a0; tbl[ia1] = a1; tbl[ia2] = a2; tbl[ia3] = a3;
+
+    const __m128i tb = memlz_gather4_direct(tbl, ib0, ib1, ib2, ib3);
+    tbl[ib0] = b0; tbl[ib1] = b1; tbl[ib2] = b2; tbl[ib3] = b3;
+
+    const __m128i eqa = _mm_cmpeq_epi32(ta, va);
+    const __m128i eqb = _mm_cmpeq_epi32(tb, vb);
+    const unsigned ma = (unsigned)_mm_movemask_ps(_mm_castsi128_ps(eqa));
+    const unsigned mb = (unsigned)_mm_movemask_ps(_mm_castsi128_ps(eqb));
+    const unsigned m = (ma << 4) | mb;
+
+    const __m128i oa = _mm_shuffle_epi8(_mm_blendv_epi8(va, ha, eqa), _mm_load_si128((const __m128i*)memlz_shuf32[ma]));
+    const __m128i ob = _mm_shuffle_epi8(_mm_blendv_epi8(vb, hb, eqb), _mm_load_si128((const __m128i*)memlz_shuf32[mb]));
+
+    const size_t la = memlz_sse_len[ma];
+    _mm_storeu_si128((__m128i*)dst, oa);
+    _mm_storeu_si128((__m128i*)(dst + la), ob);
+    *adv = la + memlz_sse_len[mb];
+    return m;
+}
+
+#define memlz_block64_sse4() { \
+                size_t adv; \
+                flags = (flags << 8) | memlz_block32x2_sse4(state->hash32, src, dst, &adv); \
+                src += 32; dst += adv; }
+
+#define MEMLZ_DO_SSE_4() \
+    memlz_block64_sse4(); \
+    memlz_block64_sse4();
+
+MEMLZ_ALIGN_16 static const uint8_t memlz_shuf64x2[16][32] = {
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f},
+    {0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f},
+    {0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x00,0x01,0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80},
+};
+
+static const uint16_t memlz_lenadv64qq[16] = {
+    0x2010, 0x1A0A, 0x1A0A, 0x1404, 0x1A10, 0x140A, 0x140A, 0x0E04, 0x1A10, 0x140A, 0x140A, 0x0E04, 0x1410, 0x0E0A, 0x0E0A, 0x0804,
+};
+
+MEMLZ_SSE42 static MEMLZ_FORCE_INLINE __m128i memlz_load2x64(const uint64_t* a, const uint64_t* b) {
+    return _mm_unpacklo_epi64(_mm_loadl_epi64((const __m128i*)a), _mm_loadl_epi64((const __m128i*)b));
+}
+
+MEMLZ_SSE42 static MEMLZ_FORCE_INLINE unsigned memlz_block64_sse8_single(uint64_t* tbl, const uint8_t* src, uint8_t* dst, size_t* adv) {
+    const uint64_t v0 = *(const uint64_t*)(src + 0), v1 = *(const uint64_t*)(src + 8);
+    const uint64_t v2 = *(const uint64_t*)(src + 16), v3 = *(const uint64_t*)(src + 24);
+    const uint32_t h0 = memlz_hash64(v0), h1 = memlz_hash64(v1);
+    const uint32_t h2 = memlz_hash64(v2), h3 = memlz_hash64(v3);
+
+    const __m128i va = _mm_loadu_si128((const __m128i*)src);
+    const __m128i vb = _mm_loadu_si128((const __m128i*)(src + 16));
+
+    const __m128i t0 = memlz_load2x64(&tbl[h0], &tbl[h1]);
+    const __m128i t1 = memlz_load2x64(&tbl[h2], &tbl[h3]);
+
+    const __m128i eqa = _mm_cmpeq_epi64(t0, va);
+    const __m128i eqb = _mm_cmpeq_epi64(t1, vb);
+
+    const unsigned m = (unsigned)_mm_movemask_ps(_mm_shuffle_ps(_mm_castsi128_ps(eqa), _mm_castsi128_ps(eqb), _MM_SHUFFLE(3, 1, 3, 1)));
+
+    const __m128i ha = _mm_set_epi64x((long long)h1, (long long)h0);
+    const __m128i hb = _mm_set_epi64x((long long)h3, (long long)h2);
+
+    const __m128i oa = _mm_shuffle_epi8(_mm_blendv_epi8(va, ha, eqa), _mm_loadu_si128((const __m128i*) & memlz_shuf64x2[m][0]));
+    const __m128i ob = _mm_shuffle_epi8(_mm_blendv_epi8(vb, hb, eqb), _mm_loadu_si128((const __m128i*) & memlz_shuf64x2[m][16]));
+
+    const unsigned e = memlz_lenadv64qq[m];
+    const size_t   la = e & 0xff;
+    _mm_storeu_si128((__m128i*)dst, oa);
+    _mm_storeu_si128((__m128i*)(dst + la), ob);
+    *adv = e >> 8;
+
+    tbl[h0] = v0; tbl[h1] = v1; tbl[h2] = v2; tbl[h3] = v3;
+    return m;
+}
+
+#define memlz_block64_sse8() { \
+                size_t adv; \
+                flags = (flags << 4) | memlz_block64_sse8_single(state->hash64, src, dst, &adv); \
+                src += 32; dst += adv; }
+
+#define MEMLZ_DO_SSE_8() \
+                memlz_block64_sse8(); \
+                memlz_block64_sse8(); \
+                memlz_block64_sse8(); \
+                memlz_block64_sse8();
+
+#endif // SSE
+
+#define MEMLZ_STEP(tbl, typ, h_func, idx, shift, flg) \
+            uint##typ##_t val_##idx = *(const uint##typ##_t*)(src + idx * sizeof(uint##typ##_t)); \
+            uint##typ##_t hash_##idx = h_func(val_##idx); \
+            uint64_t hit_##idx = (tbl[hash_##idx] == val_##idx); \
+            flg |= (hit_##idx << shift);
+
+#define MEMLZ_COMMIT(tbl, typ, idx) \
+            *(uint##typ##_t*)dst = hit_##idx ? hash_##idx : val_##idx; \
+            tbl[hash_##idx] = val_##idx; \
+            dst += sizeof(uint##typ##_t) - (hit_##idx * (sizeof(uint##typ##_t) - 2));
+
+#define MEMLZ_BLOCK(tbl, typ, h_func, flg) {\
+            flg <<= 4; \
+            MEMLZ_STEP(tbl, typ, h_func, 0, 0, flg) \
+            MEMLZ_STEP(tbl, typ, h_func, 1, 1, flg) \
+            MEMLZ_STEP(tbl, typ, h_func, 2, 2, flg) \
+            MEMLZ_STEP(tbl, typ, h_func, 3, 3, flg) \
+            MEMLZ_COMMIT(tbl, typ, 0) \
+            MEMLZ_COMMIT(tbl, typ, 1) \
+            MEMLZ_COMMIT(tbl, typ, 2) \
+            MEMLZ_COMMIT(tbl, typ, 3) \
+            src += 4 * sizeof(uint##typ##_t);}
+
+MEMLZ_SSE42 size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, size_t len, memlz_state* state) {
     if (state->reset != 'Y') {
         return 0;
     }
@@ -204,16 +420,13 @@ size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ
     const size_t max = memlz_max_compressed_len(len) > len ? memlz_max_compressed_len(len) : len;
     const size_t header_len = memlz_fields * memlz_fit(max);
     size_t missing = len;
-    const uint8_t* MEMLZ_RESTRICT src = (const uint8_t*)source;
-    uint8_t* MEMLZ_RESTRICT dst = (uint8_t*)destination;
+    const uint8_t* src = (const uint8_t*)source;
+    uint8_t* dst = (uint8_t*)destination;
     uint64_t flags = 0;
+    dst += header_len;
     uint16_t* flags_ptr = (uint16_t*)dst;
 
-    dst += header_len;
-
     for (;;) {
-        // Compress 8-byte words, then 4-byte words and compare ratios and select best.
-        // TODO: Occurences of RLE or incompressible blocks wil disturb the result.
         state->mod++;
         if (state->mod == MEMLZ_PROBELEN / 128) {
             state->cs8 = (state->total_output + (dst - (uint8_t*)destination)) - state->cs8;
@@ -253,7 +466,7 @@ size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ
         }
 #endif
         {
-            *dst++ = state->wordlen == 8 ? MEMLZ_NORMAL64 : MEMLZ_NORMAL32;
+            *dst++ = state->wordlen == 8 ? MEMLZ_NORMAL_8 : MEMLZ_NORMAL_4;
             if (missing < 16 * state->wordlen) {
                 break;
             }
@@ -261,43 +474,25 @@ size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const void* MEMLZ
             flags_ptr = (uint16_t*)dst;
             dst += 2;
 
-#define MEMLZ_STEP(tbl, typ, h_func, idx, shift, flg) \
-            uint##typ##_t val_##idx = *(const uint##typ##_t*)(src + idx * sizeof(uint##typ##_t)); \
-            uint##typ##_t hash_##idx = h_func(val_##idx); \
-            uint64_t hit_##idx = (tbl[hash_##idx] == val_##idx); \
-            flg |= (hit_##idx << shift);
-
-#define MEMLZ_COMMIT(tbl, typ, idx) \
-            *(uint##typ##_t*)dst = hit_##idx ? hash_##idx : val_##idx; \
-            tbl[hash_##idx] = val_##idx; \
-            dst += sizeof(uint##typ##_t) - (hit_##idx * (sizeof(uint##typ##_t) - 2));
-
-#define MEMLZ_BLOCK(tbl, typ, h_func, flg) \
-            flg <<= 4; \
-            MEMLZ_STEP(tbl, typ, h_func, 0, 0, flg) \
-            MEMLZ_STEP(tbl, typ, h_func, 1, 1, flg) \
-            MEMLZ_STEP(tbl, typ, h_func, 2, 2, flg) \
-            MEMLZ_STEP(tbl, typ, h_func, 3, 3, flg) \
-            MEMLZ_COMMIT(tbl, typ, 0) \
-            MEMLZ_COMMIT(tbl, typ, 1) \
-            MEMLZ_COMMIT(tbl, typ, 2) \
-            MEMLZ_COMMIT(tbl, typ, 3) \
-            src += 4 * sizeof(uint##typ##_t); 
-
             if (state->wordlen == 8) {
-                MEMLZ_UNROLL4({
-                    MEMLZ_BLOCK(state->hash64, 64, memlz_hash64, flags);
-                    })
+#ifdef MEMLZ_SSE
+                MEMLZ_DO_SSE_8();
+#else
+                MEMLZ_UNROLL4(MEMLZ_BLOCK(state->hash64, 64, memlz_hash64, flags);)
+#endif
             }
             else {
-                MEMLZ_UNROLL4({
-                    MEMLZ_BLOCK(state->hash32, 32, memlz_hash32, flags);
-                    })
+#ifdef MEMLZ_SSE
+                MEMLZ_DO_SSE_4();
+#else
+                MEMLZ_UNROLL4(MEMLZ_BLOCK(state->hash32, 32, memlz_hash32, flags);)
+#endif
             }
 
             *flags_ptr = (uint16_t)flags;
             missing -= 16 * state->wordlen;
         }
+
 
 #ifdef MEMLZ_DO_INCOMPRESSIBLE
         {
@@ -374,6 +569,156 @@ size_t memlz_compressed_len(const void* src) {
 
 #define MEMLZ_R(p, l) do { if ((p) < r1 || (l) > (size_t)((r2) - (p))) return 0; } while (0)
 #define MEMLZ_W(p, l) do { if ((p) < w1 || (l) > (size_t)((w2) - (p))) return 0; } while (0)
+
+#ifdef MEMLZ_SSE
+
+static const uint8_t memlz_len32[16] = { 16,14,14,12,14,12,12,10,14,12,12,10,12,10,10,8 };
+
+MEMLZ_ALIGN_16 static const uint8_t memlz_dexp32[16][16] = {
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b, 0x0c,0x0d,0x0e,0x0f},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x04,0x05, 0x06,0x07,0x08,0x09, 0x0a,0x0b,0x0c,0x0d},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x80,0x80, 0x06,0x07,0x08,0x09, 0x0a,0x0b,0x0c,0x0d},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x80,0x80, 0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x06,0x07, 0x08,0x09,0x80,0x80, 0x0a,0x0b,0x0c,0x0d},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x04,0x05, 0x06,0x07,0x80,0x80, 0x08,0x09,0x0a,0x0b},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x80,0x80, 0x06,0x07,0x80,0x80, 0x08,0x09,0x0a,0x0b},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x80,0x80, 0x04,0x05,0x80,0x80, 0x06,0x07,0x08,0x09},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b, 0x0c,0x0d,0x80,0x80},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x04,0x05, 0x06,0x07,0x08,0x09, 0x0a,0x0b,0x80,0x80},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x80,0x80, 0x06,0x07,0x08,0x09, 0x0a,0x0b,0x80,0x80},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x80,0x80, 0x04,0x05,0x06,0x07, 0x08,0x09,0x80,0x80},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x06,0x07, 0x08,0x09,0x80,0x80, 0x0a,0x0b,0x80,0x80},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x04,0x05, 0x06,0x07,0x80,0x80, 0x08,0x09,0x80,0x80},
+    {0x00,0x01,0x02,0x03, 0x04,0x05,0x80,0x80, 0x06,0x07,0x80,0x80, 0x08,0x09,0x80,0x80},
+    {0x00,0x01,0x80,0x80, 0x02,0x03,0x80,0x80, 0x04,0x05,0x80,0x80, 0x06,0x07,0x80,0x80},
+};
+
+static const uint8_t memlz_len64[4] = { 16, 10, 10, 4 };
+
+MEMLZ_ALIGN_16 static const uint8_t memlz_dexp64[4][16] = {
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f},
+    {0x00,0x01,0x80,0x80,0x80,0x80,0x80,0x80, 0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09},
+    {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07, 0x08,0x09,0x80,0x80,0x80,0x80,0x80,0x80},
+    {0x00,0x01,0x80,0x80,0x80,0x80,0x80,0x80, 0x02,0x03,0x80,0x80,0x80,0x80,0x80,0x80},
+};
+
+MEMLZ_SSE42 static unsigned int memlz_decode_4_sse(uint32_t* tbl, const uint8_t* src, uint8_t* dst, unsigned m) {
+    const __m128i raw = _mm_loadu_si128((const __m128i*)src);
+    const __m128i field = _mm_shuffle_epi8(raw, _mm_load_si128((const __m128i*)memlz_dexp32[m]));
+
+    const uint32_t f0 = (uint32_t)_mm_extract_epi32(field, 0);
+    const uint32_t f1 = (uint32_t)_mm_extract_epi32(field, 1);
+    const uint32_t f2 = (uint32_t)_mm_extract_epi32(field, 2);
+    const uint32_t f3 = (uint32_t)_mm_extract_epi32(field, 3);
+
+    const uint32_t g0 = tbl[f0 & 0xffffu];
+    const uint32_t g1 = tbl[f1 & 0xffffu];
+    const uint32_t g2 = tbl[f2 & 0xffffu];
+    const uint32_t g3 = tbl[f3 & 0xffffu];
+
+    const uint32_t w0 = (m & 1) ? g0 : f0;
+    const uint32_t w1 = (m & 2) ? g1 : f1;
+    const uint32_t w2 = (m & 4) ? g2 : f2;
+    const uint32_t w3 = (m & 8) ? g3 : f3;
+
+    *(uint32_t*)(dst + 0) = w0;
+    *(uint32_t*)(dst + 4) = w1;
+    *(uint32_t*)(dst + 8) = w2;
+    *(uint32_t*)(dst + 12) = w3;
+
+    tbl[memlz_hash32(w0)] = w0;
+    tbl[memlz_hash32(w1)] = w1;
+    tbl[memlz_hash32(w2)] = w2;
+    tbl[memlz_hash32(w3)] = w3;
+
+    return memlz_len32[m];
+}
+
+MEMLZ_SSE42 static unsigned memlz_decode_8_sse(uint64_t* tbl, const uint8_t* src, uint8_t* dst, unsigned m) {
+    const unsigned ma = m & 3, mb = (m >> 2) & 3;
+
+    const __m128i rawA = _mm_loadu_si128((const __m128i*)src);
+    const __m128i fieldA = _mm_shuffle_epi8(rawA, _mm_load_si128((const __m128i*)memlz_dexp64[ma]));
+    const size_t la = memlz_len64[ma];
+
+    const __m128i rawB = _mm_loadu_si128((const __m128i*)(src + la));
+    const __m128i fieldB = _mm_shuffle_epi8(rawB, _mm_load_si128((const __m128i*)memlz_dexp64[mb]));
+
+    const uint64_t f0 = (uint64_t)_mm_cvtsi128_si64(fieldA);
+    const uint64_t f1 = (uint64_t)_mm_extract_epi64(fieldA, 1);
+    const uint64_t f2 = (uint64_t)_mm_cvtsi128_si64(fieldB);
+    const uint64_t f3 = (uint64_t)_mm_extract_epi64(fieldB, 1);
+
+    const uint64_t g0 = tbl[f0 & 0xffffu];
+    const uint64_t g1 = tbl[f1 & 0xffffu];
+    const uint64_t g2 = tbl[f2 & 0xffffu];
+    const uint64_t g3 = tbl[f3 & 0xffffu];
+
+    const uint64_t w0 = (ma & 1) ? g0 : f0;
+    const uint64_t w1 = (ma & 2) ? g1 : f1;
+    const uint64_t w2 = (mb & 1) ? g2 : f2;
+    const uint64_t w3 = (mb & 2) ? g3 : f3;
+
+    *(uint64_t*)(dst + 0) = w0;
+    *(uint64_t*)(dst + 8) = w1;
+    *(uint64_t*)(dst + 16) = w2;
+    *(uint64_t*)(dst + 24) = w3;
+
+    tbl[memlz_hash64(w0)] = w0;
+    tbl[memlz_hash64(w1)] = w1;
+    tbl[memlz_hash64(w2)] = w2;
+    tbl[memlz_hash64(w3)] = w3;
+
+    return (unsigned)(la + memlz_len64[mb]);
+}
+
+#define MEMLZ_DECODE_8_SSE() { \
+                const unsigned m = (unsigned)((flags >> 12) & 0xF); \
+                src += memlz_decode_8_sse(state->hash64, src, dst, m); \
+                dst += 32; flags <<= 4; }
+
+#define MEMLZ_DECODE_4_SSE4() { \
+                const unsigned m = (unsigned)((flags >> 12) & 0xF); \
+                src += memlz_decode_4_sse(state->hash32, src, dst, m); \
+                dst += 16; flags <<= 4; }
+
+#endif
+
+#define MEMLZ_DECODE_STEP(safe, tbl, typ, idx) \
+        const uint8_t* src_##idx = curr_src; \
+        uintptr_t hit_##idx = ((flags >> (12 + idx)) & 1); \
+        typ word_##idx; \
+        if (safe) { \
+            MEMLZ_R(src_##idx, hit_##idx ? 2 : sizeof(typ)); \
+            if (hit_##idx) { \
+                word_##idx = tbl[*(const uint16_t*)src_##idx]; \
+            } else { \
+                word_##idx = *(const typ*)src_##idx; \
+            } \
+        } else { \
+            uint16_t hash_##idx = *(const uint16_t*)src_##idx; \
+            typ raw_##idx = *(const typ*)src_##idx; \
+            word_##idx = hit_##idx ? tbl[hash_##idx] : raw_##idx; \
+        } \
+        curr_src += sizeof(typ) - (hit_##idx * (sizeof(typ) - 2));
+
+#define MEMLZ_DECODE_COMMIT(tbl, typ, h_func, idx) \
+        *(typ*)(dst + (idx * sizeof(typ))) = word_##idx; \
+        tbl[h_func(word_##idx)] = word_##idx;
+
+#define MEMLZ_DECODE(safe, tbl, typ, h_func) \
+        const uint8_t* curr_src = src; \
+        MEMLZ_DECODE_STEP(safe, tbl, typ, 0) \
+        MEMLZ_DECODE_STEP(safe, tbl, typ, 1) \
+        MEMLZ_DECODE_STEP(safe, tbl, typ, 2) \
+        MEMLZ_DECODE_STEP(safe, tbl, typ, 3) \
+        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 0) \
+        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 1) \
+        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 2) \
+        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 3) \
+        src = curr_src; \
+        dst += 4 * sizeof(typ); \
+        flags <<= 4; 
 
 size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEMLZ_RESTRICT source, memlz_state* MEMLZ_RESTRICT state) {
     if (state->reset != 'Y') {
@@ -452,10 +797,10 @@ size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEM
         }
 #endif
 
-        if (blocktype == MEMLZ_NORMAL64) {
+        if (blocktype == MEMLZ_NORMAL_8) {
             memlz_wordlen = 8;
         }
-        else if (blocktype == MEMLZ_NORMAL32) {
+        else if (blocktype == MEMLZ_NORMAL_4) {
             memlz_wordlen = 4;
         }
         else {
@@ -470,80 +815,52 @@ size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEM
         flags = *(uint16_t*)src;
         src += 2;
 
-#define MEMLZ_DECODE_STEP(safe, tbl, typ, idx) \
-        const uint8_t* src_##idx = curr_src; \
-        uintptr_t hit_##idx = ((flags >> (12 + idx)) & 1); \
-        typ word_##idx; \
-        if (safe) { \
-            MEMLZ_R(src_##idx, hit_##idx ? 2 : sizeof(typ)); \
-            if (hit_##idx) { \
-                word_##idx = tbl[*(const uint16_t*)src_##idx]; \
-            } else { \
-                word_##idx = *(const typ*)src_##idx; \
-            } \
-        } else { \
-            uint16_t hash_##idx = *(const uint16_t*)src_##idx; \
-            typ raw_##idx = *(const typ*)src_##idx; \
-            word_##idx = hit_##idx ? tbl[hash_##idx] : raw_##idx; \
-        } \
-        curr_src += sizeof(typ) - (hit_##idx * (sizeof(typ) - 2));
-
-#define MEMLZ_DECODE_COMMIT(tbl, typ, h_func, idx) \
-        *(typ*)(dst + (idx * sizeof(typ))) = word_##idx; \
-        tbl[h_func(word_##idx)] = word_##idx;
-
-#define MEMLZ_DECODE_BLOCK(safe, tbl, typ, h_func) \
-        const uint8_t* curr_src = src; \
-        MEMLZ_DECODE_STEP(safe, tbl, typ, 0) \
-        MEMLZ_DECODE_STEP(safe, tbl, typ, 1) \
-        MEMLZ_DECODE_STEP(safe, tbl, typ, 2) \
-        MEMLZ_DECODE_STEP(safe, tbl, typ, 3) \
-        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 0) \
-        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 1) \
-        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 2) \
-        MEMLZ_DECODE_COMMIT(tbl, typ, h_func, 3) \
-        src = curr_src; \
-        dst += 4 * sizeof(typ); \
-        flags <<= 4; 
-
         if (src + 16 * sizeof(uint64_t) < r2) {
-            if (blocktype == MEMLZ_NORMAL64) {
+            if (blocktype == MEMLZ_NORMAL_8) {
                 MEMLZ_W(dst, 16 * sizeof(uint64_t));
-                MEMLZ_UNROLL4({ MEMLZ_DECODE_BLOCK(0, state->hash64, uint64_t, memlz_hash64); })
+#ifdef MEMLZ_SSE
+                MEMLZ_UNROLL4({ MEMLZ_DECODE_8_SSE(); })
+#else
+                MEMLZ_UNROLL4({ MEMLZ_DECODE(0, state->hash64, uint64_t, memlz_hash64); })
+#endif
                     missing -= 16 * sizeof(uint64_t);
             }
             else {
                 MEMLZ_W(dst, 16 * sizeof(uint32_t));
-                MEMLZ_UNROLL4({ MEMLZ_DECODE_BLOCK(0, state->hash32, uint32_t, memlz_hash32); })
+#ifdef MEMLZ_SSE
+                MEMLZ_UNROLL4({ MEMLZ_DECODE_4_SSE4(); })
+#else
+                MEMLZ_UNROLL4({ MEMLZ_DECODE(0, state->hash32, uint32_t, memlz_hash32); })
+#endif
                     missing -= 16 * sizeof(uint32_t);
             }
         }
         else {
-            if (blocktype == MEMLZ_NORMAL64) {
+            if (blocktype == MEMLZ_NORMAL_8) {
                 MEMLZ_W(dst, 16 * sizeof(uint64_t));
-                MEMLZ_UNROLL4({ MEMLZ_DECODE_BLOCK(1, state->hash64, uint64_t, memlz_hash64); })
+                MEMLZ_UNROLL4({ MEMLZ_DECODE(1, state->hash64, uint64_t, memlz_hash64); })
                     missing -= 16 * sizeof(uint64_t);
             }
             else {
                 MEMLZ_W(dst, 16 * sizeof(uint32_t));
-                MEMLZ_UNROLL4({ MEMLZ_DECODE_BLOCK(1, state->hash32, uint32_t, memlz_hash32); })
+                MEMLZ_UNROLL4({ MEMLZ_DECODE(1, state->hash32, uint32_t, memlz_hash32); })
                     missing -= 16 * sizeof(uint32_t);
             }
         }
     }
 
-    if (missing >= 4U * (blocktype == MEMLZ_NORMAL64 ? 8U : 4U)) {
+    if (missing >= 4U * (blocktype == MEMLZ_NORMAL_8 ? 8U : 4U)) {
         MEMLZ_R(src, 2);
         uint64_t raw_flags = *(const uint16_t*)src;
         src += 2;
 
-        if (blocktype == MEMLZ_NORMAL64) {
+        if (blocktype == MEMLZ_NORMAL_8) {
             size_t tail_blocks = (missing / 8) / 4;
             flags = raw_flags << (16 - (tail_blocks * 4));
 
             while (missing >= 4 * 8) {
                 MEMLZ_W(dst, 4 * sizeof(uint64_t));
-                MEMLZ_DECODE_BLOCK(1, state->hash64, uint64_t, memlz_hash64);
+                MEMLZ_DECODE(1, state->hash64, uint64_t, memlz_hash64);
                 missing -= 4 * 8;
             }
         }
@@ -553,7 +870,7 @@ size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEM
 
             while (missing >= 4 * 4) {
                 MEMLZ_W(dst, 4 * sizeof(uint32_t));
-                MEMLZ_DECODE_BLOCK(1, state->hash32, uint32_t, memlz_hash32);
+                MEMLZ_DECODE(1, state->hash32, uint32_t, memlz_hash32);
                 missing -= 4 * 4;
             }
         }
@@ -600,8 +917,8 @@ MEMLZ_UNUSED size_t memlz_compress(void* MEMLZ_RESTRICT destination, const void*
 #undef MEMLZ_ENCODE_WORD
 #undef MEMLZ_DECODE_WORD
 #undef MEMLZ_VOID
-#undef MEMLZ_NORMAL32
-#undef MEMLZ_NORMAL64
+#undef MEMLZ_NORMAL_4
+#undef MEMLZ_NORMAL_8
 #undef MEMLZ_UNCOMPRESSED
 #undef MEMLZ_RLE
 #undef MEMLZ_WORDPROBE4096
@@ -618,3 +935,24 @@ MEMLZ_UNUSED size_t memlz_compress(void* MEMLZ_RESTRICT destination, const void*
 #endif // MEMLZ_IMPLEMENTATION
 
 #endif // memlz_h
+
+#ifdef MEMLZ_TEST
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char* argv[]) {
+    char in[] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod "
+        "tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
+        "veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea "
+        "commodo consequat. Duis aute irure dolor in reprehenderit in voluptate "
+        "velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat";
+
+    char* out = (char*)malloc(memlz_max_compressed_len(sizeof(in)));
+    memlz_compress(out, in, sizeof(in));
+    char* de = (char*)malloc(memlz_decompressed_len(out));
+    size_t d = memlz_decompress(de, out);
+    free(out);
+    free(de);
+    return d == sizeof(in) ? 0 : 1;
+}
+#endif
