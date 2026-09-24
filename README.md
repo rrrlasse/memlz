@@ -1,11 +1,11 @@
-memlz is the world's fastest compression library
+memlz is the world's fastest compression library, running at **5 - 7 GB/s** on one core.
 
 ## Benchmark
 It has now been added to the independent benchmark suite [lzbench](https://github.com/inikep/lzbench).
 
 Fast libraries like Snappy, FastLZ, LZO and others, have better compression ratios but compression speeds well below 1000 MB/s and are not comparable. Only LZ4 with its acceleration parameter set around 32 to 64 and a few other libraries come close.
 
-Benchmark of the files [enwik8](https://mattmahoney.net/dc/textdata.html), [Silesia](https://mattmahoney.net/dc/silesia.html) and [employees_50MB.json](https://sample.json-format.com/) on an Intel i7 with a non-cached memcpy() speed of **14000 MB/s**:
+Benchmark of the files [enwik8](https://mattmahoney.net/dc/textdata.html), [Silesia](https://mattmahoney.net/dc/silesia.html) and [employees_50MB.json](https://sample.json-format.com/) on an Intel i7 with a non-cached memcpy() speed of 14000 MB/s:
 
 ![Benchmark](https://github.com/rrrlasse/memlz/blob/res/Figure_1.png)
 <br>Decompression speed is less competitive depending on the data type: [Benchmark](https://raw.githubusercontent.com/rrrlasse/memlz/refs/heads/res/Figure_2.png).
