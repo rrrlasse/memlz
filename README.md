@@ -1,4 +1,4 @@
-memlz is the world's fastest compression library, running at **5 - 7 GB/s** on one core.
+memlz is the world's fastest compression library, running at **5 - 7 GB/s** in one thread.
 
 ## Benchmark
 It has now been added to the independent benchmark suite [lzbench](https://github.com/inikep/lzbench).
