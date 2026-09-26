@@ -615,7 +615,7 @@ MEMLZ_ALIGN_16 static const uint8_t memlz_dexp64[4][16] = {
     {0x00,0x01,0x80,0x80,0x80,0x80,0x80,0x80, 0x02,0x03,0x80,0x80,0x80,0x80,0x80,0x80},
 };
 
-MEMLZ_SSE42 static unsigned int memlz_decode_4_sse(uint32_t* tbl, const uint8_t* src, uint8_t* dst, unsigned m) {
+MEMLZ_SSE42 static unsigned int memlz_decode_4_sse(uint32_t* MEMLZ_RESTRICT tbl, const uint8_t* MEMLZ_RESTRICT src, uint8_t* MEMLZ_RESTRICT dst, unsigned m) {
     const __m128i raw = _mm_loadu_si128((const __m128i*)src);
     const __m128i field = _mm_shuffle_epi8(raw, _mm_load_si128((const __m128i*)memlz_dexp32[m]));
 
@@ -647,7 +647,7 @@ MEMLZ_SSE42 static unsigned int memlz_decode_4_sse(uint32_t* tbl, const uint8_t*
     return memlz_len32[m];
 }
 
-MEMLZ_SSE42 static unsigned memlz_decode_8_sse(uint64_t* tbl, const uint8_t* src, uint8_t* dst, unsigned m) {
+MEMLZ_SSE42 static unsigned memlz_decode_8_sse(uint64_t* MEMLZ_RESTRICT tbl, const uint8_t* MEMLZ_RESTRICT src, uint8_t* MEMLZ_RESTRICT dst, unsigned m) {
     const unsigned ma = m & 3, mb = (m >> 2) & 3;
 
     const __m128i rawA = _mm_loadu_si128((const __m128i*)src);
