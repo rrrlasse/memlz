@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #endif // _WIN32
 
-
+#define MEMLZ_IMPLEMENTATION
 #include "../memlz.h"
 
 #ifndef __AFL_LOOP
