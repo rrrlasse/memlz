@@ -1,7 +1,7 @@
 memlz is the world's fastest compression library, running at **5 - 7 GB/s** in one thread.
 
 ## Benchmark
-It has now been added to the independent benchmark suites [lzbench](https://github.com/inikep/lzbench) and [Turbobench](https://github.com/powturbo/TurboBench).
+It has now been added to the independent benchmark suites [lzbench](https://github.com/inikep/lzbench) and [TurboBench](https://github.com/powturbo/TurboBench).
 
 Fast libraries like Snappy, FastLZ, LZO and others, have better compression ratios but compression speeds well below 1000 MB/s and are not comparable. Only LZ4 with its acceleration parameter set around 32 to 64 and a few other libraries come close.
 
