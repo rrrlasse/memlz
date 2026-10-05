@@ -17,6 +17,8 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h> 
+#include <stdbool.h>
+
 #ifndef __cplusplus
 #include <stdalign.h>
 #endif
@@ -177,12 +179,12 @@ static void memlz_write(void* dst, uint64_t value, size_t bytes) {
         *d = (uint8_t)value;
     }
     else if (bytes == 3) {
-        assert(value <= 0xffff); // Rettet fra < til <= da 0xffff præcis kan være i 16-bit
+        assert(value <= 0xffff);
         *d = 0x40;
         memlz_w16(d + 1, (uint16_t)value);
     }
     else if (bytes == 5) {
-        assert(value <= 0xffffffff); // Rettet fra < til <= da 0xffffffff præcis kan være i 32-bit
+        assert(value <= 0xffffffff);
         *d = 0x80;
         memlz_w32(d + 1, (uint32_t)value);
     }
@@ -245,6 +247,42 @@ static uint16_t memlz_hash64(uint64_t v) {
     return (uint16_t)(((v * 11400714819323198485ull) >> 48));
 }
 
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+
+inline uint32_t memlz_cmov32(bool cond, uint32_t then_val, uint32_t else_val) {
+    __asm__(
+        "testb %1, %1\n\t"
+        "cmovnzl %2, %0"
+        : "+r" (else_val)
+        : "r" (cond), "r" (then_val)
+        : "cc"
+    );
+    return else_val;
+}
+
+inline uint64_t memlz_cmov64(bool cond, uint64_t then_val, uint64_t else_val) {
+    __asm__(
+        "testb %1, %1\n\t"
+        "cmovnzq %2, %0"
+        : "+r" (else_val)
+        : "r" (cond), "r" (then_val)
+        : "cc"
+    );
+    return else_val;
+}
+
+#else
+
+inline uint32_t memlz_cmov32(bool cond, uint32_t then_val, uint32_t else_val) {
+    return cond ? then_val : else_val;
+}
+
+inline uint64_t memlz_cmov64(bool cond, uint64_t then_val, uint64_t else_val) {
+    return cond ? then_val : else_val;
+}
+
+#endif
+
 #ifdef MEMLZ_SSE
 
 static const uint16_t memlz_lenadv64qq[16] = {
@@ -294,10 +332,6 @@ MEMLZ_SSE42 static MEMLZ_FORCE_INLINE __m128i memlz_hash32x4_sse4(__m128i v) {
     return _mm_srli_epi32(_mm_mullo_epi32(v, _mm_set1_epi32((int)2654435761u)), 16);
 }
 
-static MEMLZ_FORCE_INLINE uint32_t memlz_idx32(uint32_t v) {
-    return (v * 2654435761u) >> 16;
-}
-
 MEMLZ_SSE42 static MEMLZ_FORCE_INLINE __m128i memlz_gather4_direct(const uint32_t* tbl, uint32_t h0, uint32_t h1, uint32_t h2, uint32_t h3) {
     __m128i t = _mm_cvtsi32_si128((int)tbl[h0]);
     t = _mm_insert_epi32(t, (int)tbl[h1], 1);
@@ -318,8 +352,8 @@ MEMLZ_SSE42 static MEMLZ_FORCE_INLINE unsigned memlz_block32x2_sse4(uint32_t* tb
     const uint32_t b0 = memlz_r32(src + 16), b1 = memlz_r32(src + 20);
     const uint32_t b2 = memlz_r32(src + 24), b3 = memlz_r32(src + 28);
 
-    const uint32_t ia0 = memlz_idx32(a0), ia1 = memlz_idx32(a1), ia2 = memlz_idx32(a2), ia3 = memlz_idx32(a3);
-    const uint32_t ib0 = memlz_idx32(b0), ib1 = memlz_idx32(b1), ib2 = memlz_idx32(b2), ib3 = memlz_idx32(b3);
+    const uint32_t ia0 = memlz_hash32(a0), ia1 = memlz_hash32(a1), ia2 = memlz_hash32(a2), ia3 = memlz_hash32(a3);
+    const uint32_t ib0 = memlz_hash32(b0), ib1 = memlz_hash32(b1), ib2 = memlz_hash32(b2), ib3 = memlz_hash32(b3);
 
     const __m128i ta = memlz_gather4_direct(tbl, ia0, ia1, ia2, ia3);
     tbl[ia0] = a0; tbl[ia1] = a1; tbl[ia2] = a2; tbl[ia3] = a3;
@@ -703,6 +737,7 @@ static MEMLZ_FORCE_INLINE unsigned memlz_decode_8_neon(uint64_t* MEMLZ_RESTRICT 
 
 #ifdef MEMLZ_SSE
 
+
 MEMLZ_SSE42 static unsigned int memlz_decode_4_sse(uint32_t* MEMLZ_RESTRICT tbl, const uint8_t* MEMLZ_RESTRICT src, uint8_t* MEMLZ_RESTRICT dst, unsigned m) {
     const __m128i raw = _mm_loadu_si128((const __m128i*)src);
     const __m128i field = _mm_shuffle_epi8(raw, _mm_load_si128((const __m128i*)memlz_dexp32[m]));
@@ -717,10 +752,10 @@ MEMLZ_SSE42 static unsigned int memlz_decode_4_sse(uint32_t* MEMLZ_RESTRICT tbl,
     const uint32_t g2 = tbl[f2 & 0xffffu];
     const uint32_t g3 = tbl[f3 & 0xffffu];
 
-    const uint32_t w0 = (m & 1) ? g0 : f0;
-    const uint32_t w1 = (m & 2) ? g1 : f1;
-    const uint32_t w2 = (m & 4) ? g2 : f2;
-    const uint32_t w3 = (m & 8) ? g3 : f3;
+    const uint32_t w0 = memlz_cmov32((m & 1) != 0, g0, f0);
+    const uint32_t w1 = memlz_cmov32((m & 2) != 0, g1, f1);
+    const uint32_t w2 = memlz_cmov32((m & 4) != 0, g2, f2);
+    const uint32_t w3 = memlz_cmov32((m & 8) != 0, g3, f3);
 
     memlz_w32(dst + 0, w0);
     memlz_w32(dst + 4, w1);
@@ -755,10 +790,10 @@ MEMLZ_SSE42 static unsigned memlz_decode_8_sse(uint64_t* MEMLZ_RESTRICT tbl, con
     const uint64_t g2 = tbl[f2 & 0xffffu];
     const uint64_t g3 = tbl[f3 & 0xffffu];
 
-    const uint64_t w0 = (ma & 1) ? g0 : f0;
-    const uint64_t w1 = (ma & 2) ? g1 : f1;
-    const uint64_t w2 = (mb & 1) ? g2 : f2;
-    const uint64_t w3 = (mb & 2) ? g3 : f3;
+    const uint64_t w0 = memlz_cmov64((ma & 1) != 0, g0, f0);
+    const uint64_t w1 = memlz_cmov64((ma & 2) != 0, g1, f1);
+    const uint64_t w2 = memlz_cmov64((mb & 1) != 0, g2, f2);
+    const uint64_t w3 = memlz_cmov64((mb & 2) != 0, g3, f3);
 
     memlz_w64(dst + 0, w0);
     memlz_w64(dst + 8, w1);
