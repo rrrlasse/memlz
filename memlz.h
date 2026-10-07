@@ -113,7 +113,7 @@ extern "C" {
 #define MEMLZ_ALIGN_16 _Alignas(16)
 #endif
 
-#ifndef _WIN32
+#if defined(__GNUC__) || defined(__clang__)
 #ifdef MEMLZ_SSE
 #define MEMLZ_SSE42 __attribute__((target("sse4.2")))
 #else
