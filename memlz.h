@@ -125,8 +125,6 @@ extern "C" {
 #define MEMLZ_UNUSED
 #endif
 
-#define MEMLZ_INCOMPRESSIBLE_TRIGGER (4)
-#define MEMLZ_INCOMPRESSIBLE_ADVANCE (16 * MEMLZ_INCOMPRESSIBLE_TRIGGER)
 #define MEMLZ_PROBELEN (2 * 1024)
 #define MEMLZ_BLOCKLEN (128 * 1024)
 #define MEMLZ_RLE 'D'
@@ -141,6 +139,7 @@ extern "C" {
 #define MEMLZ_MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 #define MEMLZ_WORDS (64)
 #define MEMLZ_FIELDS 2
+#define MEMLZ_MIN_ADVANCE (64 * 4) // bits in flag * payload per bit
 
 static inline uint16_t memlz_r16(const void* p) { uint16_t v; memcpy(&v, p, 2); return v; }
 static inline uint32_t memlz_r32(const void* p) { uint32_t v; memcpy(&v, p, 4); return v; }
@@ -543,22 +542,16 @@ MEMLZ_SSE42 size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const
             missing -= 4 * 16 * state->wordlen;
         }
 
-
 #ifdef MEMLZ_DO_INCOMPRESSIBLE
         {
             state->incompressible = flags ? 0 : state->incompressible + 1;
-            if (state->incompressible > 0 && missing >= MEMLZ_INCOMPRESSIBLE_ADVANCE && state->incompressible % MEMLZ_INCOMPRESSIBLE_TRIGGER == 0) {
-                size_t u = MEMLZ_INCOMPRESSIBLE_ADVANCE * state->incompressible;
-                u = u > missing ? missing : u;
-                u = u > 1024 ? 1024 : u;
-                u = u & ~(sizeof(uint64_t) - 1);
+            if (state->incompressible > 0 && missing > 0) {
+                size_t u = 64 + 128 * state->incompressible;
+                u = MEMLZ_MIN(MEMLZ_MIN(u, missing), 8 * 1024);
                 *dst++ = MEMLZ_UNCOMPRESSED;
-                memlz_w16(dst, (uint16_t)u);
                 memlz_write(dst, u, memlz_fit(u));
                 dst += memlz_fit(u);
-                for (size_t n = 0; n < u / sizeof(uint64_t); n++) {
-                    memlz_w64(dst + n * sizeof(uint64_t), memlz_r64(src + n * sizeof(uint64_t)));
-                }
+                memcpy(dst, src, u);
                 dst += u;
                 src += u;
                 missing -= u;
@@ -887,8 +880,7 @@ size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEM
 
     for (;;) {
         // Prevent infinite loops or slow advance 
-        const size_t min_advance = MEMLZ_MIN(64, MEMLZ_MIN(MEMLZ_INCOMPRESSIBLE_ADVANCE, MEMLZ_MIN_RLE));
-        if (last_missing != 0 && missing > last_missing + min_advance) {
+        if (last_missing != 0 && missing > last_missing + MEMLZ_MIN_ADVANCE) {
             return 0;
         }
         last_missing = missing;
@@ -905,9 +897,7 @@ size_t memlz_stream_decompress(void* MEMLZ_RESTRICT destination, const void* MEM
             src += len;
             MEMLZ_R(src, unc);
             MEMLZ_W(dst, unc);
-            for (size_t n = 0; n < unc / sizeof(uint64_t); n++) {
-                memlz_w64(dst + n * sizeof(uint64_t), memlz_r64(src + n * sizeof(uint64_t)));
-            }
+            memcpy(dst, src, unc);
             src += unc;
             dst += unc;
             missing -= unc;
