@@ -127,6 +127,7 @@ extern "C" {
 
 #define MEMLZ_PROBELEN (2 * 1024)
 #define MEMLZ_BLOCKLEN (128 * 1024)
+#define MEMLZ_FACTOR (0.95)
 #define MEMLZ_RLE 'D'
 #define MEMLZ_MIN_RLE (4 * sizeof(uint64_t))
 #define MEMLZ_RESTRICT __restrict
@@ -209,11 +210,12 @@ typedef struct memlz_state {
     uint32_t hash32[1 << 16];
     uint64_t total_input;
     uint64_t total_output;
-    size_t mod;
+    size_t probe;
     size_t wordlen;
-    size_t cs4;
-    size_t cs8;
+    size_t cs_start;
+    size_t cs_size;
     size_t incompressible;
+    size_t old_wordlen;
     char reset;
 } memlz_state;
 
@@ -230,11 +232,11 @@ void memlz_reset(memlz_state* c) {
     memset(c->hash64, 0, sizeof(c->hash64));
     c->total_input = 0;
     c->total_output = 0;
-    c->mod = 0;
+    c->probe = 0;
     c->wordlen = 8;
-    c->cs4 = 0;
-    c->cs8 = 0;
-    c->incompressible = 0;
+    c->cs_start = 0;
+    c->cs_size = 0;
+    c->incompressible = 64;
     c->reset = 'Y';
 }
 
@@ -475,23 +477,24 @@ MEMLZ_SSE42 size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const
     uint64_t* flags_ptr = (uint64_t*)dst;
 
     for (;;) {
-        state->mod++;
-        if (state->mod == MEMLZ_PROBELEN / 128) {
-            state->cs8 = (state->total_output + (dst - (uint8_t*)destination)) - state->cs8;
-            state->cs4 = (state->total_output + (dst - (uint8_t*)destination));
-            state->wordlen = 4;
+        state->probe += 128 * state->wordlen;
+
+        uint64_t current_pos = state->total_output + (dst - (uint8_t*)destination);
+
+        if (state->probe == MEMLZ_BLOCKLEN) {
+            state->cs_start = current_pos;
         }
-        else if (state->mod == 3 * MEMLZ_PROBELEN / 128) {
-            state->cs4 = state->total_output + (dst - (uint8_t*)destination) - state->cs4;
-            if (state->cs8 < state->cs4) {
-                state->wordlen = 8;
+        else if (state->probe == MEMLZ_BLOCKLEN + MEMLZ_PROBELEN) {
+            state->cs_size = current_pos - state->cs_start;
+            state->cs_start = current_pos;
+            state->wordlen = state->wordlen == 4 ? 8 : 4;
+        }
+        else if (state->probe == MEMLZ_BLOCKLEN + 2 * MEMLZ_PROBELEN) {
+            size_t cur_size = current_pos - state->cs_start;
+            if (cur_size * MEMLZ_FACTOR > state->cs_size) {
+                state->wordlen = state->wordlen == 4 ? 8 : 4;
             }
-        }
-        else if (state->mod == (MEMLZ_BLOCKLEN + MEMLZ_PROBELEN) / 128) {
-            state->wordlen = 8;
-            state->mod = 0;
-            state->cs8 = state->total_output + (dst - (uint8_t*)destination);
-            state->cs4 = 0;
+            state->probe = 0;
         }
 
 #ifdef MEMLZ_DO_RLE
@@ -544,9 +547,9 @@ MEMLZ_SSE42 size_t memlz_stream_compress(void* MEMLZ_RESTRICT destination, const
 
 #ifdef MEMLZ_DO_INCOMPRESSIBLE
         {
-            state->incompressible = flags ? 0 : state->incompressible + 1;
-            if (state->incompressible > 0 && missing > 0) {
-                size_t u = 64 + 128 * state->incompressible;
+            state->incompressible = flags ? 64 : state->incompressible * 5 / 4;
+            if (!flags && missing > 0) {
+                size_t u = state->incompressible;
                 u = MEMLZ_MIN(MEMLZ_MIN(u, missing), 8 * 1024);
                 *dst++ = MEMLZ_UNCOMPRESSED;
                 memlz_write(dst, u, memlz_fit(u));
