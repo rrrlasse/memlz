@@ -250,26 +250,32 @@ static uint16_t memlz_hash64(uint64_t v) {
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
 
-inline uint32_t memlz_cmov32(bool cond, uint32_t then_val, uint32_t else_val) {
+static inline uint32_t memlz_cmov32(int cond, uint32_t then_val, uint32_t else_val) {
+    uint32_t res;
     __asm__(
-        "testb %1, %1\n\t"
+        "testl %1, %1\n\t"
         "cmovnzl %2, %0"
-        : "+r" (else_val)
-        : "r" (cond), "r" (then_val)
+        : "=r" (res)
+        : "r" (cond),
+        "r" (then_val),
+        "0" (else_val)
         : "cc"
     );
-    return else_val;
+    return res;
 }
 
-inline uint64_t memlz_cmov64(bool cond, uint64_t then_val, uint64_t else_val) {
+static inline uint64_t memlz_cmov64(int cond, uint64_t then_val, uint64_t else_val) {
+    uint64_t res;
     __asm__(
-        "testb %1, %1\n\t"
+        "testl %1, %1\n\t"
         "cmovnzq %2, %0"
-        : "+r" (else_val)
-        : "r" (cond), "r" (then_val)
+        : "=r" (res)
+        : "r" (cond),
+        "r" (then_val),
+        "0" (else_val)
         : "cc"
     );
-    return else_val;
+    return res;
 }
 
 #else
