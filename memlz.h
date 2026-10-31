@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 //
-// memlz 0.6 beta - extremely fast header-only compression library for C and C++ on x64/x86
+// memlz 0.7 beta - extremely fast header-only compression library for C and C++ on x64/x86
 //
 // Copyright 2025 - 2026, Lasse Mikkel Reinhold
 //
